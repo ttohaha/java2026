@@ -1,0 +1,43 @@
+# Compiled files
+target/
+*.class
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+# VS Code
+.vscode/
+
+# Mac OS
+.DS_Store
+
+# Maven wrapper (оставляем, это нормально)
+!.mvn/wrapper/maven-wrapper.jar
+
+# Sensitive data (если есть)
+# *.properties
+# *.yml
