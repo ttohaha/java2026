@@ -1,4 +1,23 @@
 package blinov_first.entity;
 
-public class AbstractEntity {
+import java.io.Serializable;
+
+public abstract class AbstractEntity implements Serializable {
+
+    private long id;
+
+    public AbstractEntity() {
+    }
+
+    public AbstractEntity(long id) {
+        this.id = id;
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
 }

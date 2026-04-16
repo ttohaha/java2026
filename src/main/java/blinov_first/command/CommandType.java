@@ -1,14 +1,21 @@
 package blinov_first.command;
 
-import blinov_first.command.impl.AddUserCommand;
-import blinov_first.command.impl.DefaultCommand;
-import blinov_first.command.impl.LoginCommand;
-import blinov_first.command.impl.LogoutCommand;
+import blinov_first.command.impl.*;
 
 public enum CommandType {
     ADD_USER(new AddUserCommand()),
     LOGIN(new LoginCommand()),
     LOGOUT(new LogoutCommand()),
+    CONFIRM_EMAIL(new ConfirmEmailCommand()),
+    EDIT_PROFILE(new EditProfileCommand()),
+    LIST_ENTRIES(new ListEntriesCommand()),
+    ADD_ENTRY(new AddEntryCommand()),
+    EDIT_ENTRY(new EditEntryCommand()),
+    DELETE_ENTRY(new DeleteEntryCommand()),
+    UPLOAD_FILE(new UploadFileCommand()),
+    LIST_FILES(new ListFilesCommand()),
+    DOWNLOAD_FILE(new DownloadFileCommand()),
+    DELETE_FILE(new DeleteFileCommand()),
     DEFAULT(new DefaultCommand());
 
     private final Command command;
@@ -22,10 +29,9 @@ public enum CommandType {
     }
 
     public static Command define(String commandStr) {
-        if (commandStr == null || commandStr.isEmpty()) {
+        if (commandStr == null || commandStr.isBlank()) {
             return DEFAULT.command;
         }
-
         try {
             return CommandType.valueOf(commandStr.toUpperCase()).command;
         } catch (IllegalArgumentException e) {

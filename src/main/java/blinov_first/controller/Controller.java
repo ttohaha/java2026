@@ -1,50 +1,91 @@
 package blinov_first.controller;
 
-import java.io.*;
-
 import blinov_first.command.Command;
 import blinov_first.command.CommandType;
+import blinov_first.exception.CommandException;
+import blinov_first.util.AttributeName;
+import blinov_first.util.PagePath;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.*;
-import jakarta.servlet.annotation.*;
+import jakarta.servlet.annotation.MultipartConfig;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-// Используем именно эти импорты для SLF4J
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.io.IOException;
 
-@WebServlet(name = "helloServlet", urlPatterns = {"/controller", "*.do"})
+@WebServlet(name = "Controller", urlPatterns = {"/controller"})
+@MultipartConfig(
+        fileSizeThreshold = 1024 * 1024 * 2, // 2 MB
+        maxFileSize = 10L * 1024 * 1024 * 1024, // 10 GB
+        maxRequestSize = 15L * 1024 * 1024 * 1024
+)
 public class Controller extends HttpServlet {
 
-    // 1. Инициализируем логгер через SLF4J
-    private static final Logger logger = LoggerFactory.getLogger(Controller.class);
+    private static final Logger LOGGER = LogManager.getLogger(Controller.class);
 
-    public void init() {
-        logger.info("Сервлет blinov_first.controller.Controller инициализирован");
+    @Override
+    public void init() throws ServletException {
+        LOGGER.info("Controller servlet initialized");
+        super.init();
     }
 
     @Override
-    public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        request.setCharacterEncoding("UTF-8");
-        response.setContentType("text/html;charset=UTF-8");
-        String strNum = request.getParameter("num");
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        processRequest(request, response);
+    }
 
-        String commandStr = request.getParameter("command");
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        processRequest(request, response);
+    }
+
+    private void processRequest(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+
+        request.setCharacterEncoding("UTF-8");
+        response.setCharacterEncoding("UTF-8");
+        // Inject response for download commands
+        request.setAttribute("__HTTP_RESPONSE__", response);
+
+        String commandStr = request.getParameter(AttributeName.COMMAND);
+        LOGGER.debug("Processing command: {}", commandStr);
+
         Command command = CommandType.define(commandStr);
-        String page = null;
+        LOGGER.debug("Resolved command class: {}", command.getClass().getSimpleName());
+
         try {
-            page = command.execute(request);
-            request.getRequestDispatcher(page).forward(request, response);
-        } catch (blinov_first.exception.CommandException e) {
-            response.sendError(500);
+            String result = command.execute(request);
+            LOGGER.debug("Command returned: {}", result);
+
+            if (result == null) return; // Response already handled (e.g., download)
+
+            if (result.startsWith("redirect:")) {
+                String redirectUrl = request.getContextPath() + result.substring(9);
+                LOGGER.debug("Redirecting to: {}", redirectUrl);
+                response.sendRedirect(redirectUrl);
+                return;
+            }
+
+            if (result != null && !result.isEmpty()) {
+                request.getRequestDispatcher(result).forward(request, response);
+            } else {
+                response.sendRedirect(request.getContextPath() + PagePath.INDEX);
+            }
+        } catch (CommandException e) {
+            LOGGER.error("Command execution failed for command: {}", commandStr, e);
+            request.setAttribute(AttributeName.ERROR_MSG, "Internal error: " + e.getMessage());
+            request.getRequestDispatcher(PagePath.ERROR_500).forward(request, response);
         }
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        doGet(req, resp);
-    }
-
     public void destroy() {
-        logger.info("Сервлет blinov_first.controller.Controller уничтожен");
+        LOGGER.info("Controller servlet destroyed");
+        super.destroy();
     }
 }

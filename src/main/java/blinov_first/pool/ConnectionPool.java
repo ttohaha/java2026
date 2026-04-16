@@ -1,38 +1,40 @@
 package blinov_first.pool;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 public class ConnectionPool {
-    private static final String URL = "jdbc:mysql://localhost:3306/phonestest2";
+    private static final Logger logger = LogManager.getLogger(ConnectionPool.class);
+
+    // Added timezone parameters to avoid common MySQL connection errors
+    private static final String URL = "jdbc:mysql://localhost:3306/phonestest2?useUnicode=true&serverTimezone=UTC";
     private static final int POOL_SIZE = 8;
 
-    // ЛОГ ПРЯМО В КОНСОЛЬ ДЛЯ ДИАГНОСТИКИ
-    private static final ConnectionPool instance;
-
+    // 1. STATIC BLOCK MUST BE HERE (Before instance creation)
     static {
-        System.out.println("[POOL DEBUG] Начало статической инициализации ConnectionPool...");
         try {
-            // Принудительная проверка драйвера
             Class.forName("com.mysql.cj.jdbc.Driver");
-            System.out.println("[POOL DEBUG] Драйвер найден успешно.");
+            logger.info("MySQL Driver registered successfully");
         } catch (ClassNotFoundException e) {
-            System.err.println("[POOL ERROR] КРИТИЧЕСКАЯ ОШИБКА: Драйвер MySQL не найден в classpath!");
-            e.printStackTrace();
+            logger.fatal("MySQL Driver not found in classpath", e);
+            throw new RuntimeException(e);
         }
-        instance = new ConnectionPool();
     }
+
+    // 2. NOW IT IS SAFE TO CREATE THE INSTANCE
+    private static final ConnectionPool instance = new ConnectionPool();
 
     private final BlockingQueue<Connection> free = new LinkedBlockingQueue<>(POOL_SIZE);
     private final BlockingQueue<Connection> used = new LinkedBlockingQueue<>(POOL_SIZE);
 
     private ConnectionPool() {
-        System.out.println("[POOL DEBUG] Конструктор пула: пытаюсь создать " + POOL_SIZE + " соединений...");
         Properties prop = new Properties();
         prop.put("user", "root");
         prop.put("password", "7GAZcCrhHaLH");
@@ -41,13 +43,11 @@ public class ConnectionPool {
             try {
                 Connection connection = DriverManager.getConnection(URL, prop);
                 free.add(connection);
-                System.out.println("[POOL DEBUG] Соединение #" + (i + 1) + " создано и добавлено в пул.");
             } catch (SQLException e) {
-                System.err.println("[POOL ERROR] Не удалось создать соединение #" + (i + 1));
-                e.printStackTrace();
+                logger.error("Failed to create connection #{}", i + 1, e);
             }
         }
-        System.out.println("[POOL DEBUG] Инициализация окончена. Свободно: " + free.size());
+        logger.info("Pool initialized with {} connections", free.size());
     }
 
     public static ConnectionPool getInstance() {
@@ -57,33 +57,38 @@ public class ConnectionPool {
     public Connection getConnection() {
         Connection connection = null;
         try {
-            System.out.println("[POOL DEBUG] Запрос соединения... (Свободно: " + free.size() + ")");
-            // Ждем максимум 5 секунд, чтобы не висеть вечно
-            connection = free.poll(5, TimeUnit.SECONDS);
-
-            if (connection == null) {
-                System.err.println("[POOL ERROR] ТАЙМАУТ: Соединений в пуле нет! Возможно, ты забыл их возвращать?");
-            } else {
-                used.put(connection);
-                System.out.println("[POOL DEBUG] Соединение выдано. Используется: " + used.size());
-            }
+            connection = free.take();
+            used.put(connection);
+            logger.debug("Connection issued. Used: {}, Free: {}", used.size(), free.size());
         } catch (InterruptedException e) {
+            logger.error("Interrupted while waiting for connection", e);
             Thread.currentThread().interrupt();
-            e.printStackTrace();
         }
         return connection;
     }
 
     public void releaseConnection(Connection connection) {
         if (connection != null) {
-            used.remove(connection);
             try {
+                used.remove(connection);
                 free.put(connection);
-                System.out.println("[POOL DEBUG] Соединение вернулось. Свободно: " + free.size());
+                logger.debug("Connection returned. Used: {}, Free: {}", used.size(), free.size());
             } catch (InterruptedException e) {
+                logger.error("Interrupted while releasing connection", e);
                 Thread.currentThread().interrupt();
-                e.printStackTrace();
             }
         }
+    }
+
+    public void destroyPool() {
+        for (int i = 0; i < POOL_SIZE; i++) {
+            try {
+                Connection connection = free.take();
+                connection.close();
+            } catch (SQLException | InterruptedException e) {
+                logger.error("Error closing connection during pool destruction", e);
+            }
+        }
+        logger.info("Connection pool destroyed successfully");
     }
 }

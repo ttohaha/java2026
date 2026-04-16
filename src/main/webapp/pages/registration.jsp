@@ -1,36 +1,45 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Registration</title>
-    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/style.css">
+    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/main.css">
 </head>
 <body>
 
 <div class="login-container">
-    <h2>Регистрация</h2>
+    <h2>Registration</h2>
 
-    <c:if test="${not empty errorMsg}">
-        <div class="error-msg">${errorMsg}</div>
+    <%-- Error message display --%>
+    <c:if test="${not empty errorMessage}">
+        <div class="error-msg">${errorMessage}</div>
     </c:if>
 
-    <c:if test="${not empty successMsg}">
-        <div class="success-msg">${successMsg}</div>
+    <%-- Success message display --%>
+    <c:if test="${not empty successMessage}">
+        <div class="success-msg">${successMessage}</div>
     </c:if>
 
     <form action="${pageContext.request.contextPath}/controller" method="POST">
+        <%-- Command name matches ADD_USER in CommandType Enum --%>
         <input type="hidden" name="command" value="add_user">
 
-        <input type="text" name="login" placeholder="Придумайте логин" required>
-        <input type="password" name="password" placeholder="Придумайте пароль" required>
-        <input type="email" name="email" placeholder="Email" required>
+        <label for="login">Login:</label>
+        <input type="text" id="login" name="login" placeholder="Create login" required>
 
-        <input type="submit" value="Зарегистрироваться">
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" placeholder="Create password" required>
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" placeholder="Enter email" required>
+
+        <input type="submit" value="Sign Up">
     </form>
 
     <p>
-        <a href="${pageContext.request.contextPath}/index.jsp">Назад к логину</a>
+        <a href="${pageContext.request.contextPath}/index.jsp">Back to Login</a>
     </p>
 </div>
 

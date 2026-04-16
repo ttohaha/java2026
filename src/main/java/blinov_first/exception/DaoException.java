@@ -1,7 +1,11 @@
 package blinov_first.exception;
 
-public class DaoException extends Exception{
+public class DaoException extends Exception {
+
+    private static final long serialVersionUID = 1L;
+
     public DaoException() {
+        super();
     }
 
     public DaoException(String message) {

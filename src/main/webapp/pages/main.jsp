@@ -1,50 +1,57 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
-<%@ page import="java.util.List" %>
-<%@ page import="blinov_first.entity.User" %>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Main Page</title>
-    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/style.css">
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/main.css">
+    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/tables.css">
 </head>
 <body>
+<div class="container">
+    <h2>Welcome, ${sessionScope.login}!</h2>
 
-<h1>Hello, ${sessionScope.user}!</h1>
+    <c:if test="${not empty successMsg}">
+        <div class="success-msg">${successMsg}</div>
+    </c:if>
+    <c:if test="${not empty errorMsg}">
+        <div class="error-msg">${errorMsg}</div>
+    </c:if>
 
-<h3>List of all users:</h3>
-<table>
-    <thead>
-    <tr>
-        <th>Lastname</th>
-        <th>Email</th>
-        <th>Phone</th>
-    </tr>
-    </thead>
-    <tbody>
-    <%
-        List<User> userList = (List<User>) request.getAttribute("userList");
-        if (userList != null) {
-            for (User u : userList) {
-    %>
-    <tr>
-        <td><%= (u.getLastname() != null) ? u.getLastname() : "N/A" %></td>
-        <td><%= u.getEmail() %></td>
-        <td><%= (u.getPhone() != null) ? u.getPhone() : "N/A" %></td>
-    </tr>
-    <%
-        }
-    } else {
-    %>
-    <tr>
-        <td colspan="3" style="text-align: center;">Данные не загружены</td>
-    </tr>
-    <% } %>
-    </tbody>
-</table>
+    <h3>Registered Users List</h3>
+    <c:choose>
+        <c:when test="${not empty userList}">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>Lastname</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                </tr>
+                </thead>
+                <tbody>
+                <c:forEach var="user" items="${userList}">
+                    <tr>
+                        <td>${user.lastname}</td>
+                        <td>${user.email}</td>
+                        <td>${user.phone}</td>
+                    </tr>
+                </c:forEach>
+                </tbody>
+            </table>
+        </c:when>
+        <c:otherwise>
+            <p class="info-msg">No data available</p>
+        </c:otherwise>
+    </c:choose>
 
-<br/>
-<a href="${pageContext.request.contextPath}/controller?command=logout" class="logout-link">Logout (Sign Out)</a>
-
+    <div class="nav-links">
+        <a href="${pageContext.request.contextPath}/controller?command=edit_profile">My Profile</a>
+        <a href="${pageContext.request.contextPath}/controller?command=list_entries">Phone Book</a>
+        <a href="${pageContext.request.contextPath}/controller?command=list_files">My Files</a>
+        <a href="${pageContext.request.contextPath}/controller?command=logout">Logout</a>
+    </div>
+</div>
 </body>
 </html>
