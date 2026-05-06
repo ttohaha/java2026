@@ -7,14 +7,12 @@ import blinov_first.exception.ServiceException;
 import blinov_first.factory.PhoneEntryServiceFactory;
 import blinov_first.service.PhoneEntryService;
 import blinov_first.util.AttributeName;
+import blinov_first.util.FlashMessage;
 import blinov_first.util.PagePath;
 import blinov_first.util.SessionUtil;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.IOException;
 
 public class AddEntryCommand implements Command {
 
@@ -22,23 +20,16 @@ public class AddEntryCommand implements Command {
 
     @Override
     public String execute(HttpServletRequest request) throws CommandException {
-        if (!SessionUtil.isLoggedIn(request)) {
-            LOGGER.warn("Unauthorized access to add entry");
-            return PagePath.INDEX;
-        }
+        if (!SessionUtil.isLoggedIn(request)) return PagePath.INDEX;
 
         Long userId = SessionUtil.getUserId(request);
-        if (userId == null) {
-            return PagePath.INDEX;
-        }
+        if (userId == null) return PagePath.INDEX;
 
-        // GET: show empty form
         if ("GET".equalsIgnoreCase(request.getMethod())) {
             return PagePath.ENTRY_FORM;
         }
 
-        // POST: process form and save
-        String name = request.getParameter("contactName");
+        String name  = request.getParameter("contactName");
         String phone = request.getParameter("contactPhone");
         String email = request.getParameter("contactEmail");
 
@@ -51,20 +42,16 @@ public class AddEntryCommand implements Command {
         PhoneEntryService service = PhoneEntryServiceFactory.getPhoneEntryService();
 
         try {
-            boolean success = service.addEntry(entry);
-            if (success) {
-                request.setAttribute(AttributeName.SUCCESS_MSG, "Contact added successfully");
+            if (service.addEntry(entry)) {
+                FlashMessage.success(request, "Contact added successfully");
             } else {
-                request.setAttribute(AttributeName.ERROR_MSG, "Failed to add contact (maybe duplicate phone?)");
-                return PagePath.ENTRY_FORM;
+                FlashMessage.error(request, "Failed to add contact");
             }
         } catch (ServiceException e) {
             LOGGER.error("Failed to add entry for user: {}", userId, e);
-            request.setAttribute(AttributeName.ERROR_MSG, "Error: " + e.getMessage());
-            return PagePath.ENTRY_FORM;
+            FlashMessage.error(request, "Error: " + e.getMessage());
         }
 
-        // FIX: Redirect to list_entries command to reload fresh data (PRG pattern)
         return "redirect:/controller?command=list_entries";
     }
 }

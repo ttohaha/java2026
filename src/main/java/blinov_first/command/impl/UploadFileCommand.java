@@ -4,8 +4,8 @@ import blinov_first.command.Command;
 import blinov_first.exception.CommandException;
 import blinov_first.exception.ServiceException;
 import blinov_first.factory.MediaFileServiceFactory;
-import blinov_first.service.MediaFileService;
 import blinov_first.util.AttributeName;
+import blinov_first.util.FlashMessage;
 import blinov_first.util.PagePath;
 import blinov_first.util.SessionUtil;
 import jakarta.servlet.ServletException;
@@ -23,6 +23,7 @@ public class UploadFileCommand implements Command {
     @Override
     public String execute(HttpServletRequest request) throws CommandException {
         if (!SessionUtil.isLoggedIn(request)) return PagePath.INDEX;
+
         Long userId = SessionUtil.getUserId(request);
         if (userId == null) return PagePath.INDEX;
 
@@ -38,25 +39,21 @@ public class UploadFileCommand implements Command {
             }
 
             String originalName = filePart.getSubmittedFileName();
-            String contentType = filePart.getContentType();
-            long size = filePart.getSize();
+            String contentType  = filePart.getContentType();
+            long   size         = filePart.getSize();
 
-            MediaFileService service = MediaFileServiceFactory.getMediaFileService();
-            boolean success = service.uploadFile(filePart.getInputStream(), originalName, contentType, size, userId);
+            boolean success = MediaFileServiceFactory.getMediaFileService()
+                    .uploadFile(filePart.getInputStream(), originalName, contentType, size, userId);
 
             if (success) {
-                request.setAttribute(AttributeName.SUCCESS_MSG, "File uploaded successfully");
+                FlashMessage.success(request, "File uploaded successfully");
                 return "redirect:/controller?command=list_files";
             } else {
                 request.setAttribute(AttributeName.ERROR_MSG, "Upload failed");
                 return PagePath.UPLOAD_FORM;
             }
-        } catch (IOException | ServletException e) {
-            LOGGER.error("File upload processing error", e);
-            request.setAttribute(AttributeName.ERROR_MSG, "Upload error: " + e.getMessage());
-            return PagePath.UPLOAD_FORM;
-        } catch (ServiceException e) {
-            LOGGER.error("Service error during upload", e);
+        } catch (IOException | ServletException | ServiceException e) {
+            LOGGER.error("File upload error", e);
             request.setAttribute(AttributeName.ERROR_MSG, "Upload error: " + e.getMessage());
             return PagePath.UPLOAD_FORM;
         }

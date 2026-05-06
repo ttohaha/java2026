@@ -7,6 +7,7 @@ import blinov_first.exception.DaoException;
 import blinov_first.exception.ServiceException;
 import blinov_first.service.impl.UserServiceImpl;
 import blinov_first.util.AttributeName;
+import blinov_first.util.FlashMessage;
 import blinov_first.util.PagePath;
 import blinov_first.util.SessionUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,17 +20,11 @@ public class EditProfileCommand implements Command {
 
     @Override
     public String execute(HttpServletRequest request) throws CommandException {
-        if (!SessionUtil.isLoggedIn(request)) {
-            LOGGER.warn("Unauthorized access to profile");
-            return PagePath.INDEX;
-        }
+        if (!SessionUtil.isLoggedIn(request)) return PagePath.INDEX;
 
         Long userId = SessionUtil.getUserId(request);
-        if (userId == null) {
-            return PagePath.INDEX;
-        }
+        if (userId == null) return PagePath.INDEX;
 
-        // Handle GET (view profile) vs POST (update profile)
         if ("GET".equalsIgnoreCase(request.getMethod())) {
             try {
                 User user = blinov_first.dao.impl.UserDaoImpl.getInstance()
@@ -43,29 +38,26 @@ public class EditProfileCommand implements Command {
             }
         }
 
-        // POST: update profile
         String lastname = request.getParameter("lastname");
-        String phone = request.getParameter("phone");
-        String email = request.getParameter(AttributeName.EMAIL);
+        String phone    = request.getParameter("phone");
+        String email    = request.getParameter(AttributeName.EMAIL);
 
-        // Validate required fields
         if (lastname == null || lastname.trim().isEmpty()) {
-            request.setAttribute(AttributeName.ERROR_MSG, "Lastname is required");
+            request.setAttribute(AttributeName.ERROR_MSG, "Last name is required");
             return PagePath.PROFILE;
         }
 
         try {
-            boolean success = UserServiceImpl.getInstance().updateUserProfile(
-                    userId.intValue(), lastname, phone, email);
-            if (success) {
-                request.setAttribute(AttributeName.SUCCESS_MSG, "Profile updated successfully");
+            if (UserServiceImpl.getInstance().updateUserProfile(userId.intValue(), lastname, phone, email)) {
+                FlashMessage.success(request, "Profile updated successfully");
             } else {
-                request.setAttribute(AttributeName.ERROR_MSG, "Profile update failed");
+                FlashMessage.error(request, "Profile update failed");
             }
         } catch (ServiceException e) {
-            LOGGER.error("Profile update error for user id: {}", userId, e);
-            throw new CommandException("Profile update failed", e);
+            LOGGER.error("Profile update error for userId: {}", userId, e);
+            FlashMessage.error(request, "Update error: " + e.getMessage());
         }
-        return PagePath.PROFILE;
+
+        return "redirect:/controller?command=edit_profile";
     }
 }

@@ -1,76 +1,90 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
-<%@ taglib prefix="c" uri="jakarta.tags.core" %>
-<%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
+<%@ taglib prefix="c"   uri="jakarta.tags.core" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+<%@ taglib prefix="fn"  uri="jakarta.tags.functions" %>
+<%@ taglib prefix="pb"  uri="http://blinov.first/tags" %>
+<%@ include file="fragments/locale_setup.jsp" %>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="${lang}">
 <head>
-  <meta charset="UTF-8">
-  <title>My Files</title>
-  <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/main.css">
-  <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/tables.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><fmt:message key="files.title"/> — <fmt:message key="app.title"/></title>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css">
 </head>
-<body>
-<div class="container">
-  <h2>My Files</h2>
-  <c:if test="${not empty errorMsg}"><div class="error-msg">${errorMsg}</div></c:if>
-  <c:if test="${not empty successMsg}"><div class="success-msg">${successMsg}</div></c:if>
+<body class="app-page">
+<%@ include file="fragments/navbar.jsp" %>
+<div class="page-wrapper">
+    <div class="page-header">
+        <h2><fmt:message key="files.heading"/></h2>
+        <a href="${pageContext.request.contextPath}/controller?command=upload_file" class="btn btn-outline">
+            &#8593; <fmt:message key="files.upload"/>
+        </a>
+    </div>
 
-  <p>
-    <a href="${pageContext.request.contextPath}/controller?command=upload_file">Upload New File</a> |
-    <a href="${pageContext.request.contextPath}/controller?command=logout">Sign Out</a>
-  </p>
+    <pb:alert type="danger"  message="${errorMsg}"/>
+    <pb:alert type="success" message="${successMsg}"/>
 
-  <c:choose>
-    <c:when test="${empty fileList}">
-      <p class="info-msg">No files uploaded yet.</p>
-    </c:when>
-    <c:otherwise>
-      <table class="data-table">
-        <thead>
-        <tr>
-          <th>Preview</th>
-          <th>Original Name</th>
-          <th>Size</th>
-          <th>Uploaded</th>
-          <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        <c:forEach var="file" items="${fileList}">
-          <tr>
-            <td>
-              <c:choose>
-                <c:when test="${fn:startsWith(file.contentType, 'image/')}">
-                  <img src="${pageContext.request.contextPath}/controller?command=download_file&fileId=${file.id}"
-                       width="50" height="50" style="object-fit: cover;" alt="preview">
-                </c:when>
-                <c:otherwise>
-                  📄
-                </c:otherwise>
-              </c:choose>
-            </td>
-            <td>${fn:escapeXml(file.originalFilename)}</td>
-            <td>${file.fileSize / 1024} KB</td>
-            <td>
-              <c:choose>
-                <c:when test="${not empty file.uploadDate}">
-                  ${file.uploadDate.toLocalDate()}
-                </c:when>
-                <c:otherwise>-</c:otherwise>
-              </c:choose>
-            </td>
-            <td>
-              <a href="${pageContext.request.contextPath}/controller?command=download_file&fileId=${file.id}">Download</a> |
-              <a href="${pageContext.request.contextPath}/controller?command=delete_file&fileId=${file.id}"
-                 onclick="return confirm('Delete this file?');">Delete</a>
-            </td>
-          </tr>
-        </c:forEach>
-        </tbody>
-      </table>
-    </c:otherwise>
-  </c:choose>
-  <p><a href="${pageContext.request.contextPath}/controller?command=edit_profile">Back to Profile</a></p>
+    <div class="table-wrapper">
+        <c:choose>
+            <c:when test="${empty fileList}">
+                <div class="empty-state">
+                    <div class="empty-icon">&#128193;</div>
+                    <p><fmt:message key="files.empty"/></p>
+                    <a href="${pageContext.request.contextPath}/controller?command=upload_file" class="btn btn-outline">
+                        <fmt:message key="files.upload"/>
+                    </a>
+                </div>
+            </c:when>
+            <c:otherwise>
+                <fmt:message key="files.delete.confirm" var="deleteConfirm"/>
+                <fmt:message key="files.download"       var="downloadLabel"/>
+                <fmt:message key="files.delete"         var="deleteLabel"/>
+                <table class="data-table">
+                    <thead><tr>
+                        <th><fmt:message key="files.col.preview"/></th>
+                        <th><fmt:message key="files.col.name"/></th>
+                        <th><fmt:message key="files.col.size"/></th>
+                        <th><fmt:message key="files.col.date"/></th>
+                        <th><fmt:message key="files.col.actions"/></th>
+                    </tr></thead>
+                    <tbody>
+                    <c:forEach var="file" items="${fileList}">
+                        <tr>
+                            <td>
+                                <c:choose>
+                                    <c:when test="${fn:startsWith(file.contentType, 'image/')}">
+                                        <img class="file-thumb"
+                                             src="${pageContext.request.contextPath}/controller?command=download_file&fileId=${file.id}"
+                                             alt="preview">
+                                    </c:when>
+                                    <c:otherwise><div class="file-icon">&#128196;</div></c:otherwise>
+                                </c:choose>
+                            </td>
+                            <td><strong>${fn:escapeXml(file.originalFilename)}</strong></td>
+                            <td>${file.fileSize / 1024} KB</td>
+                            <td>${not empty file.uploadDate ? file.uploadDate.toLocalDate() : '—'}</td>
+                            <td>
+                                <div class="table-actions">
+                                    <pb:actionLink
+                                            href="${pageContext.request.contextPath}/controller?command=download_file&fileId=${file.id}"
+                                            label="${downloadLabel}"
+                                            style="success"/>
+                                    <pb:actionLink
+                                            href="${pageContext.request.contextPath}/controller?command=delete_file&fileId=${file.id}"
+                                            label="${deleteLabel}"
+                                            style="danger"
+                                            confirm="${deleteConfirm}"/>
+                                </div>
+                            </td>
+                        </tr>
+                    </c:forEach>
+                    </tbody>
+                </table>
+            </c:otherwise>
+        </c:choose>
+    </div>
 </div>
+<script src="${pageContext.request.contextPath}/js/script.js"></script>
 </body>
 </html>

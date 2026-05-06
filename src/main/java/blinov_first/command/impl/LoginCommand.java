@@ -6,8 +6,10 @@ import blinov_first.exception.CommandException;
 import blinov_first.exception.ServiceException;
 import blinov_first.service.impl.UserServiceImpl;
 import blinov_first.util.AttributeName;
+import blinov_first.util.CookieUtil;
 import blinov_first.util.PagePath;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -19,10 +21,16 @@ public class LoginCommand implements Command {
 
     private static final Logger LOGGER = LogManager.getLogger(LoginCommand.class);
 
+    private static final String PARAM_REMEMBER_ME = "rememberMe";
+
     @Override
     public String execute(HttpServletRequest request) throws CommandException {
-        String login = request.getParameter(AttributeName.LOGIN);
-        String password = request.getParameter(AttributeName.PASSWORD);
+        String login      = request.getParameter(AttributeName.LOGIN);
+        String password   = request.getParameter(AttributeName.PASSWORD);
+        String rememberMe = request.getParameter(PARAM_REMEMBER_ME);
+
+        HttpServletResponse response =
+                (HttpServletResponse) request.getAttribute(AttributeName.HTTP_RESPONSE);
 
         try {
             if (UserServiceImpl.getInstance().authenticate(login, password)) {
@@ -35,8 +43,25 @@ public class LoginCommand implements Command {
                     LOGGER.info("Session created for user: {} (id={})", login, userId);
                 }
 
+                if (response != null) {
+                    if ("on".equals(rememberMe)) {
+                        CookieUtil.writeRememberLogin(response, login);
+                    } else {
+                        CookieUtil.delete(response, CookieUtil.COOKIE_REMEMBER_LOGIN);
+                    }
+                }
+
+                String lastPage = CookieUtil.read(request, CookieUtil.COOKIE_LAST_PAGE)
+                        .filter(p -> !p.isBlank())
+                        .orElse(null);
+
                 List<User> userList = UserServiceImpl.getInstance().findAllUsers();
                 request.setAttribute(AttributeName.USER_LIST, userList);
+
+                if (lastPage != null && response != null) {
+                    CookieUtil.delete(response, CookieUtil.COOKIE_LAST_PAGE);
+                    return "redirect:" + lastPage;
+                }
 
                 return PagePath.MAIN;
             }

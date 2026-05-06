@@ -4,8 +4,8 @@ import blinov_first.command.Command;
 import blinov_first.exception.CommandException;
 import blinov_first.exception.ServiceException;
 import blinov_first.factory.MediaFileServiceFactory;
-import blinov_first.service.MediaFileService;
 import blinov_first.util.AttributeName;
+import blinov_first.util.FlashMessage;
 import blinov_first.util.PagePath;
 import blinov_first.util.SessionUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,27 +19,25 @@ public class DeleteFileCommand implements Command {
     @Override
     public String execute(HttpServletRequest request) throws CommandException {
         if (!SessionUtil.isLoggedIn(request)) return PagePath.INDEX;
+
         Long userId = SessionUtil.getUserId(request);
         if (userId == null) return PagePath.INDEX;
 
         String idStr = request.getParameter(AttributeName.FILE_ID);
-        if (idStr == null) return PagePath.MEDIA_LIST;
+        if (idStr == null) return "redirect:/controller?command=list_files";
 
         try {
             int fileId = Integer.parseInt(idStr);
-            MediaFileService service = MediaFileServiceFactory.getMediaFileService();
-            boolean success = service.deleteFile(fileId, userId);
-
-            if (success) {
-                request.setAttribute(AttributeName.SUCCESS_MSG, "File deleted successfully");
+            if (MediaFileServiceFactory.getMediaFileService().deleteFile(fileId, userId)) {
+                FlashMessage.success(request, "File deleted successfully");
             } else {
-                request.setAttribute(AttributeName.ERROR_MSG, "Failed to delete file");
+                FlashMessage.error(request, "Failed to delete file");
             }
-            return "redirect:/controller?command=list_files";
         } catch (NumberFormatException | ServiceException e) {
             LOGGER.error("File deletion failed", e);
-            request.setAttribute(AttributeName.ERROR_MSG, "Deletion error: " + e.getMessage());
-            return PagePath.MEDIA_LIST;
+            FlashMessage.error(request, "Deletion error: " + e.getMessage());
         }
+
+        return "redirect:/controller?command=list_files";
     }
 }

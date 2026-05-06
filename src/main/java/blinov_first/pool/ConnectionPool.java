@@ -3,92 +3,173 @@ package blinov_first.pool;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConnectionPool {
-    private static final Logger logger = LogManager.getLogger(ConnectionPool.class);
 
-    // Added timezone parameters to avoid common MySQL connection errors
-    private static final String URL = "jdbc:mysql://localhost:3306/phonestest2?useUnicode=true&serverTimezone=UTC";
-    private static final int POOL_SIZE = 8;
+    private static final Logger LOGGER = LogManager.getLogger(ConnectionPool.class);
 
-    // 1. STATIC BLOCK MUST BE HERE (Before instance creation)
-    static {
-        try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            logger.info("MySQL Driver registered successfully");
-        } catch (ClassNotFoundException e) {
-            logger.fatal("MySQL Driver not found in classpath", e);
-            throw new RuntimeException(e);
-        }
-    }
+    private static volatile ConnectionPool instance;
 
-    // 2. NOW IT IS SAFE TO CREATE THE INSTANCE
-    private static final ConnectionPool instance = new ConnectionPool();
+    private static volatile int configuredMinSize = PoolConfig.MIN_SIZE;
+    private static volatile int configuredMaxSize = PoolConfig.MAX_SIZE;
 
-    private final BlockingQueue<Connection> free = new LinkedBlockingQueue<>(POOL_SIZE);
-    private final BlockingQueue<Connection> used = new LinkedBlockingQueue<>(POOL_SIZE);
+    private final BlockingQueue<Connection> availableQueue;
+    private final AtomicInteger currentSize;
+    private final int maxSize;
+    private final int timeoutMs;
 
     private ConnectionPool() {
-        Properties prop = new Properties();
-        prop.put("user", "root");
-        prop.put("password", "7GAZcCrhHaLH");
+        this.availableQueue = new LinkedBlockingQueue<>();
+        this.currentSize    = new AtomicInteger(0);
+        this.maxSize        = configuredMaxSize;
+        this.timeoutMs      = PoolConfig.TIMEOUT_MS;
+        initializePool();
+    }
 
-        for (int i = 0; i < POOL_SIZE; i++) {
-            try {
-                Connection connection = DriverManager.getConnection(URL, prop);
-                free.add(connection);
-            } catch (SQLException e) {
-                logger.error("Failed to create connection #{}", i + 1, e);
-            }
+    /**
+     * Must be called before the first getInstance() call.
+     * Typically invoked from ConnectionPoolListener on application startup.
+     */
+    public static void configure(int minSize, int maxSize) {
+        if (instance != null) {
+            LOGGER.warn("configure() called after pool was already created — ignored");
+            return;
         }
-        logger.info("Pool initialized with {} connections", free.size());
+        configuredMinSize = minSize;
+        configuredMaxSize = maxSize;
+        LOGGER.info("ConnectionPool configured: minSize={}, maxSize={}", minSize, maxSize);
     }
 
     public static ConnectionPool getInstance() {
+        if (instance == null) {
+            synchronized (ConnectionPool.class) {
+                if (instance == null) {
+                    instance = new ConnectionPool();
+                }
+            }
+        }
         return instance;
     }
 
-    public Connection getConnection() {
-        Connection connection = null;
+    private void initializePool() {
         try {
-            connection = free.take();
-            used.put(connection);
-            logger.debug("Connection issued. Used: {}, Free: {}", used.size(), free.size());
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            LOGGER.error("MySQL driver not found", e);
+            throw new RuntimeException("Database driver initialization failed", e);
+        }
+
+        for (int i = 0; i < configuredMinSize; i++) {
+            try {
+                Connection real = DriverManager.getConnection(
+                        PoolConfig.DB_URL, PoolConfig.DB_USER, PoolConfig.DB_PASSWORD);
+                availableQueue.offer(createProxyConnection(real));
+                currentSize.incrementAndGet();
+            } catch (SQLException e) {
+                LOGGER.error("Failed to create initial connection #{}", i, e);
+            }
+        }
+
+        LOGGER.info("ConnectionPool initialized — min: {}, max: {}, available: {}",
+                configuredMinSize, maxSize, availableQueue.size());
+    }
+
+    public Connection getConnection() throws SQLException {
+        Connection proxy;
+        try {
+            proxy = availableQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            logger.error("Interrupted while waiting for connection", e);
             Thread.currentThread().interrupt();
+            throw new SQLException("Connection pool wait interrupted", e);
         }
-        return connection;
+
+        if (proxy == null) {
+            if (currentSize.get() < maxSize) {
+                synchronized (this) {
+                    if (currentSize.get() < maxSize) {
+                        Connection real = DriverManager.getConnection(
+                                PoolConfig.DB_URL, PoolConfig.DB_USER, PoolConfig.DB_PASSWORD);
+                        currentSize.incrementAndGet();
+                        LOGGER.debug("New connection created. Total: {}", currentSize.get());
+                        return createProxyConnection(real);
+                    }
+                }
+            }
+            throw new SQLException(
+                    "No available connections within " + timeoutMs + " ms");
+        }
+
+        if (!proxy.isValid(PoolConfig.VALIDATION_TIMEOUT_SEC)) {
+            LOGGER.warn("Discarded dead connection, creating replacement");
+            currentSize.decrementAndGet();
+            Connection real = DriverManager.getConnection(
+                    PoolConfig.DB_URL, PoolConfig.DB_USER, PoolConfig.DB_PASSWORD);
+            return createProxyConnection(real);
+        }
+
+        LOGGER.debug("Connection issued. Available: {}", availableQueue.size());
+        return proxy;
     }
 
-    public void releaseConnection(Connection connection) {
-        if (connection != null) {
-            try {
-                used.remove(connection);
-                free.put(connection);
-                logger.debug("Connection returned. Used: {}, Free: {}", used.size(), free.size());
-            } catch (InterruptedException e) {
-                logger.error("Interrupted while releasing connection", e);
-                Thread.currentThread().interrupt();
+    public void releaseConnection(Connection proxy) {
+        if (proxy == null) return;
+        try {
+            if (proxy.isValid(PoolConfig.VALIDATION_TIMEOUT_SEC) && !proxy.isClosed()) {
+                proxy.setAutoCommit(true);
+                availableQueue.offer(proxy);
+                LOGGER.debug("Connection returned. Available: {}", availableQueue.size());
+            } else {
+                LOGGER.warn("Discarded invalid connection on release");
+                currentSize.decrementAndGet();
             }
+        } catch (SQLException e) {
+            LOGGER.error("Error releasing connection", e);
+            currentSize.decrementAndGet();
         }
     }
 
-    public void destroyPool() {
-        for (int i = 0; i < POOL_SIZE; i++) {
+    public int getAvailableCount() {
+        return availableQueue.size();
+    }
+
+    public int getTotalCount() {
+        return currentSize.get();
+    }
+
+    private Connection createProxyConnection(Connection real) {
+        return (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(),
+                new Class[]{Connection.class},
+                (proxy, method, args) -> {
+                    if ("close".equals(method.getName())) {
+                        releaseConnection((Connection) proxy);
+                        return null;
+                    }
+                    return method.invoke(real, args);
+                }
+        );
+    }
+
+    public void shutdown() {
+        LOGGER.info("Shutting down ConnectionPool...");
+        Connection conn;
+        while ((conn = availableQueue.poll()) != null) {
             try {
-                Connection connection = free.take();
-                connection.close();
-            } catch (SQLException | InterruptedException e) {
-                logger.error("Error closing connection during pool destruction", e);
+                conn.close();
+            } catch (SQLException e) {
+                LOGGER.error("Error closing connection during shutdown", e);
             }
         }
-        logger.info("Connection pool destroyed successfully");
+        availableQueue.clear();
+        currentSize.set(0);
+        LOGGER.info("ConnectionPool shut down. Connections closed.");
     }
 }

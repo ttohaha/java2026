@@ -1,46 +1,108 @@
-.login-container {
-    background-color: #ffffff;
-    padding: 30px;
-    margin-top: 50px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    width: 350px;
-}
-
+/* ── Form layout ─────────────────────────────────────────────────────── */
 .form-group {
     display: flex;
     flex-direction: column;
-    margin-bottom: 15px;
+    margin-bottom: 18px;
 }
 
-input[type="text"],
-input[type="password"],
-input[type="email"] {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
+.form-label {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 6px;
+    letter-spacing: .01em;
 }
 
-input[type="submit"] {
-    background-color: #2ecc71;
-    color: white;
-    padding: 12px;
-    border: none;
-    border-radius: 4px;
+/* ── Inputs ──────────────────────────────────────────────────────────── */
+.form-control {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: .95rem;
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: border-color var(--transition), box-shadow var(--transition);
+    outline: none;
+}
+
+.form-control:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(102,126,234,.15);
+}
+
+.form-control.is-invalid {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+
+.form-control::placeholder { color: #a0aec0; }
+
+input[type="file"].form-control {
+    padding: 8px 14px;
     cursor: pointer;
-    font-weight: bold;
+    font-size: .875rem;
 }
 
-input[type="submit"]:hover {
-    background-color: #27ae60;
+textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
 }
 
-.error-msg {
-    color: #e74c3c;
-    background-color: #fadbd8;
-    padding: 10px;
-    margin-bottom: 15px;
-    border-radius: 4px;
+/* ── Field error message ─────────────────────────────────────────────── */
+.field-error {
+    font-size: .78rem;
+    color: var(--color-danger);
+    margin-top: 4px;
+    display: none;
+}
+.field-error.visible { display: block; }
+
+/* ── Form hint ───────────────────────────────────────────────────────── */
+.form-hint {
+    font-size: .78rem;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+}
+
+/* ── File upload area ────────────────────────────────────────────────── */
+.upload-area {
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 36px 24px;
     text-align: center;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
 }
+.upload-area:hover, .upload-area.drag-over {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+.upload-area .upload-icon { font-size: 2.5rem; margin-bottom: 8px; }
+.upload-area p { font-size: .9rem; margin-bottom: 4px; color: var(--color-text-muted); }
+.upload-area input[type="file"] {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+.upload-area-wrapper { position: relative; }
+
+/* ── Password strength ───────────────────────────────────────────────── */
+.password-strength {
+    margin-top: 6px;
+    display: flex;
+    gap: 4px;
+}
+.strength-bar {
+    flex: 1;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-border);
+    transition: background var(--transition);
+}
+.strength-bar.weak   { background: var(--color-danger); }
+.strength-bar.medium { background: var(--color-warning); }
+.strength-bar.strong { background: var(--color-success); }

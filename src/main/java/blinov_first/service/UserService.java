@@ -11,5 +11,6 @@ public interface UserService {
     boolean updateUserProfile(int userId, String lastname, String phone, String email) throws ServiceException;
     // === New methods for email confirmation ===
     boolean registerWithConfirmation(String login, String password, String email) throws ServiceException;
+    String  registerAndGetToken(String login, String password, String email) throws ServiceException;
     boolean confirmRegistration(String token) throws ServiceException;
 }

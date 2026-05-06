@@ -12,10 +12,12 @@ public enum CommandType {
     ADD_ENTRY(new AddEntryCommand()),
     EDIT_ENTRY(new EditEntryCommand()),
     DELETE_ENTRY(new DeleteEntryCommand()),
+    SEARCH_ENTRIES(new SearchEntriesCommand()),
     UPLOAD_FILE(new UploadFileCommand()),
     LIST_FILES(new ListFilesCommand()),
     DOWNLOAD_FILE(new DownloadFileCommand()),
     DELETE_FILE(new DeleteFileCommand()),
+    CHANGE_LOCALE(new ChangeLocaleCommand()),
     DEFAULT(new DefaultCommand());
 
     private final Command command;

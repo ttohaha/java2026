@@ -1,56 +1,62 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
-<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<%@ taglib prefix="c"   uri="jakarta.tags.core" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+<%@ taglib prefix="pb"  uri="http://blinov.first/tags" %>
+<%@ include file="fragments/locale_setup.jsp" %>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="${lang}">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard</title>
-    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/main.css">
-    <link rel="stylesheet" type="text/css" href="${pageContext.request.contextPath}/css/tables.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><fmt:message key="main.title"/> — <fmt:message key="app.title"/></title>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css">
 </head>
-<body>
-<div class="container">
-    <h2>Welcome, ${sessionScope.login}!</h2>
+<body class="app-page">
+<%@ include file="fragments/navbar.jsp" %>
+<div class="page-wrapper">
+    <div class="page-header">
+        <h2><fmt:message key="main.welcome"><fmt:param value="${sessionScope.login}"/></fmt:message></h2>
+    </div>
 
-    <c:if test="${not empty successMsg}">
-        <div class="success-msg">${successMsg}</div>
-    </c:if>
-    <c:if test="${not empty errorMsg}">
-        <div class="error-msg">${errorMsg}</div>
-    </c:if>
+    <pb:alert type="danger"  message="${errorMsg}"/>
+    <pb:alert type="success" message="${successMsg}"/>
 
-    <h3>Registered Users List</h3>
-    <c:choose>
-        <c:when test="${not empty userList}">
-            <table class="data-table">
-                <thead>
-                <tr>
-                    <th>Lastname</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                </tr>
-                </thead>
-                <tbody>
-                <c:forEach var="user" items="${userList}">
-                    <tr>
-                        <td>${user.lastname}</td>
-                        <td>${user.email}</td>
-                        <td>${user.phone}</td>
-                    </tr>
-                </c:forEach>
-                </tbody>
-            </table>
-        </c:when>
-        <c:otherwise>
-            <p class="info-msg">No data available</p>
-        </c:otherwise>
-    </c:choose>
-
-    <div class="nav-links">
-        <a href="${pageContext.request.contextPath}/controller?command=edit_profile">My Profile</a>
-        <a href="${pageContext.request.contextPath}/controller?command=list_entries">Phone Book</a>
-        <a href="${pageContext.request.contextPath}/controller?command=list_files">My Files</a>
-        <a href="${pageContext.request.contextPath}/controller?command=logout">Logout</a>
+    <div class="table-wrapper">
+        <c:choose>
+            <c:when test="${not empty userList}">
+                <fmt:message key="main.status.active"   var="labelActive"/>
+                <fmt:message key="main.status.inactive" var="labelInactive"/>
+                <table class="data-table">
+                    <thead><tr>
+                        <th><fmt:message key="main.col.lastname"/></th>
+                        <th><fmt:message key="main.col.email"/></th>
+                        <th><fmt:message key="main.col.phone"/></th>
+                        <th><fmt:message key="main.col.status"/></th>
+                    </tr></thead>
+                    <tbody>
+                    <c:forEach var="u" items="${userList}">
+                        <tr>
+                            <td><strong>${u.lastname}</strong></td>
+                            <td>${u.email}</td>
+                            <td>${u.phone}</td>
+                            <td>
+                                <pb:badge
+                                        status="${u.active ? 'active' : 'inactive'}"
+                                        labelActive="${labelActive}"
+                                        labelInactive="${labelInactive}"/>
+                            </td>
+                        </tr>
+                    </c:forEach>
+                    </tbody>
+                </table>
+            </c:when>
+            <c:otherwise>
+                <div class="empty-state">
+                    <div class="empty-icon">&#128101;</div>
+                    <p><fmt:message key="main.nodata"/></p>
+                </div>
+            </c:otherwise>
+        </c:choose>
     </div>
 </div>
 </body>

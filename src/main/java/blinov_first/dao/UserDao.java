@@ -15,4 +15,5 @@ public interface UserDao {
     Optional<User> findByConfirmationToken(String token) throws DaoException;
     boolean activateUserByToken(String token) throws DaoException;
     boolean isUserActive(String login) throws DaoException;
+    boolean saveTelegramChatId(long userId, long chatId) throws DaoException;
 }

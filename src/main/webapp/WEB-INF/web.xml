@@ -1,8 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+             https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd"
          version="5.0">
+
+    <!-- Connection pool configuration -->
+    <context-param>
+        <param-name>pool.min.size</param-name>
+        <param-value>5</param-value>
+    </context-param>
+    <context-param>
+        <param-name>pool.max.size</param-name>
+        <param-value>20</param-value>
+    </context-param>
+
+    <!-- Filters: Encoding → Flash → Security -->
+    <filter>
+        <filter-name>EncodingFilter</filter-name>
+        <filter-class>blinov_first.filter.EncodingFilter</filter-class>
+        <init-param>
+            <param-name>encoding</param-name>
+            <param-value>UTF-8</param-value>
+        </init-param>
+    </filter>
+    <filter-mapping>
+        <filter-name>EncodingFilter</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+    <filter>
+        <filter-name>FlashFilter</filter-name>
+        <filter-class>blinov_first.filter.FlashFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>FlashFilter</filter-name>
+        <url-pattern>/controller</url-pattern>
+    </filter-mapping>
+
+    <filter>
+        <filter-name>SecurityFilter</filter-name>
+        <filter-class>blinov_first.filter.SecurityFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>SecurityFilter</filter-name>
+        <url-pattern>/controller</url-pattern>
+    </filter-mapping>
+    <filter-mapping>
+        <filter-name>SecurityFilter</filter-name>
+        <url-pattern>/pages/*</url-pattern>
+    </filter-mapping>
+
+    <!-- Error pages -->
+    <error-page>
+        <error-code>403</error-code>
+        <location>/pages/error/error_403.jsp</location>
+    </error-page>
     <error-page>
         <error-code>404</error-code>
         <location>/pages/error/error_404.jsp</location>
@@ -11,4 +64,5 @@
         <exception-type>java.lang.Throwable</exception-type>
         <location>/pages/error/error_500.jsp</location>
     </error-page>
+
 </web-app>

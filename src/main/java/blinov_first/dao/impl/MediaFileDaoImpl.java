@@ -38,8 +38,8 @@ public class MediaFileDaoImpl implements MediaFileDao {
     @Override
     public boolean add(MediaFile file) throws DaoException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement stmt = connection.prepareStatement(INSERT_FILE, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(INSERT_FILE, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setLong(1, file.getUserId());
             stmt.setString(2, file.getStoredFilename());
             stmt.setString(3, file.getOriginalFilename());
@@ -59,16 +59,14 @@ public class MediaFileDaoImpl implements MediaFileDao {
         } catch (SQLException e) {
             LOGGER.error("Failed to insert media file record for user: {}", file.getUserId(), e);
             throw new DaoException("Database error during media file insertion", e);
-        } finally {
-            pool.releaseConnection(connection);
         }
     }
 
     @Override
     public Optional<MediaFile> findById(int id) throws DaoException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement stmt = connection.prepareStatement(SELECT_BY_ID)) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_ID)) {
             stmt.setInt(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -78,8 +76,6 @@ public class MediaFileDaoImpl implements MediaFileDao {
         } catch (SQLException e) {
             LOGGER.error("Failed to find media file by id: {}", id, e);
             throw new DaoException("Database error during findById", e);
-        } finally {
-            pool.releaseConnection(connection);
         }
         return Optional.empty();
     }
@@ -88,8 +84,8 @@ public class MediaFileDaoImpl implements MediaFileDao {
     public List<MediaFile> findByUserId(Long userId) throws DaoException {
         List<MediaFile> files = new ArrayList<>();
         ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement stmt = connection.prepareStatement(SELECT_BY_USER_ID)) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_USER_ID)) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -99,8 +95,6 @@ public class MediaFileDaoImpl implements MediaFileDao {
         } catch (SQLException e) {
             LOGGER.error("Failed to fetch media files for user: {}", userId, e);
             throw new DaoException("Database error during findByUserId", e);
-        } finally {
-            pool.releaseConnection(connection);
         }
         return files;
     }
@@ -108,16 +102,14 @@ public class MediaFileDaoImpl implements MediaFileDao {
     @Override
     public boolean deleteById(int id, Long userId) throws DaoException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement stmt = connection.prepareStatement(DELETE_BY_ID_AND_USER)) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(DELETE_BY_ID_AND_USER)) {
             stmt.setInt(1, id);
             stmt.setLong(2, userId);
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             LOGGER.error("Failed to delete media file record: {}", id, e);
             throw new DaoException("Database error during delete", e);
-        } finally {
-            pool.releaseConnection(connection);
         }
     }
 

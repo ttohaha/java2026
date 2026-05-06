@@ -18,9 +18,9 @@ import java.io.IOException;
 
 @WebServlet(name = "Controller", urlPatterns = {"/controller"})
 @MultipartConfig(
-        fileSizeThreshold = 1024 * 1024 * 2, // 2 MB
-        maxFileSize = 10L * 1024 * 1024 * 1024, // 10 GB
-        maxRequestSize = 15L * 1024 * 1024 * 1024
+        fileSizeThreshold = 1024 * 1024 * 2,
+        maxFileSize       = 10L * 1024 * 1024,
+        maxRequestSize    = 15L * 1024 * 1024
 )
 public class Controller extends HttpServlet {
 
@@ -28,7 +28,7 @@ public class Controller extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        LOGGER.info("Controller servlet initialized");
+        LOGGER.info("Controller initialized");
         super.init();
     }
 
@@ -47,45 +47,37 @@ public class Controller extends HttpServlet {
     private void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        request.setCharacterEncoding("UTF-8");
-        response.setCharacterEncoding("UTF-8");
-        // Inject response for download commands
-        request.setAttribute("__HTTP_RESPONSE__", response);
+        request.setAttribute(AttributeName.HTTP_RESPONSE, response);
 
         String commandStr = request.getParameter(AttributeName.COMMAND);
         LOGGER.debug("Processing command: {}", commandStr);
 
         Command command = CommandType.define(commandStr);
-        LOGGER.debug("Resolved command class: {}", command.getClass().getSimpleName());
 
         try {
             String result = command.execute(request);
-            LOGGER.debug("Command returned: {}", result);
 
-            if (result == null) return; // Response already handled (e.g., download)
-
-            if (result.startsWith("redirect:")) {
-                String redirectUrl = request.getContextPath() + result.substring(9);
-                LOGGER.debug("Redirecting to: {}", redirectUrl);
-                response.sendRedirect(redirectUrl);
+            if (result == null || PagePath.AJAX_HANDLED.equals(result)) {
                 return;
             }
 
-            if (result != null && !result.isEmpty()) {
-                request.getRequestDispatcher(result).forward(request, response);
-            } else {
-                response.sendRedirect(request.getContextPath() + PagePath.INDEX);
+            if (result.startsWith("redirect:")) {
+                response.sendRedirect(request.getContextPath() + result.substring(9));
+                return;
             }
+
+            request.getRequestDispatcher(result).forward(request, response);
+
         } catch (CommandException e) {
-            LOGGER.error("Command execution failed for command: {}", commandStr, e);
-            request.setAttribute(AttributeName.ERROR_MSG, "Internal error: " + e.getMessage());
+            LOGGER.error("Command '{}' failed: {}", commandStr, e.getMessage(), e);
+            request.setAttribute(AttributeName.ERROR_MSG, e.getMessage());
             request.getRequestDispatcher(PagePath.ERROR_500).forward(request, response);
         }
     }
 
     @Override
     public void destroy() {
-        LOGGER.info("Controller servlet destroyed");
+        LOGGER.info("Controller destroyed");
         super.destroy();
     }
 }
