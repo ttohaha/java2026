@@ -1,12 +1,9 @@
 package blinov_first.exception;
 
+/**
+ * Thrown when the DAO layer encounters a data-access error.
+ */
 public class DaoException extends Exception {
-
-    private static final long serialVersionUID = 1L;
-
-    public DaoException() {
-        super();
-    }
 
     public DaoException(String message) {
         super(message);
@@ -14,9 +11,5 @@ public class DaoException extends Exception {
 
     public DaoException(String message, Throwable cause) {
         super(message, cause);
-    }
-
-    public DaoException(Throwable cause) {
-        super(cause);
     }
 }

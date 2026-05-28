@@ -1,110 +1,159 @@
 package blinov_first.service.impl;
 
-import blinov_first.config.UploadConfig;
+import blinov_first.config.UploadProperties;
 import blinov_first.dao.MediaFileDao;
-import blinov_first.dao.impl.MediaFileDaoImpl;
 import blinov_first.entity.MediaFile;
 import blinov_first.exception.DaoException;
 import blinov_first.exception.ServiceException;
 import blinov_first.service.MediaFileService;
 import blinov_first.util.FileNameGenerator;
 import blinov_first.util.FileValidator;
+import jakarta.annotation.PostConstruct;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Handles file upload/download on behalf of users.
+ * Replaces the old {@code MediaFileServiceImpl} + {@code MediaFileServiceFactory}.
+ *
+ * PATTERN — Singleton: @Service — one instance per Spring context.
+ */
+@Service
 public class MediaFileServiceImpl implements MediaFileService {
 
     private static final Logger LOGGER = LogManager.getLogger(MediaFileServiceImpl.class);
-    private static final MediaFileServiceImpl INSTANCE = new MediaFileServiceImpl();
 
-    private MediaFileServiceImpl() {}
+    private final MediaFileDao      fileDao;
+    private final UploadProperties  props;
+    private final FileValidator     fileValidator;
 
-    public static MediaFileServiceImpl getInstance() {
-        return INSTANCE;
+    public MediaFileServiceImpl(MediaFileDao fileDao,
+                                UploadProperties props,
+                                FileValidator fileValidator) {
+        this.fileDao       = fileDao;
+        this.props         = props;
+        this.fileValidator = fileValidator;
     }
 
-    @Override
-    public List<MediaFile> getUserFiles(Long userId) throws ServiceException {
+    /** Creates the upload directory on startup if it does not yet exist. */
+    @PostConstruct
+    public void ensureUploadDir() {
         try {
-            return MediaFileDaoImpl.getInstance().findByUserId(userId);
-        } catch (DaoException e) {
-            throw new ServiceException("Failed to fetch user files", e);
-        }
-    }
-
-    @Override
-    public boolean uploadFile(InputStream fileStream, String originalFilename, String contentType, long fileSize, Long userId) throws ServiceException {
-        if (!FileValidator.isAllowedType(originalFilename, contentType)) {
-            throw new ServiceException("File type is not allowed");
-        }
-        if (!FileValidator.isWithinSizeLimit(fileSize)) {
-            throw new ServiceException("File size exceeds maximum limit");
-        }
-
-        String safeName = FileValidator.sanitizeFilename(originalFilename);
-        String storedName = FileNameGenerator.generateSafeName(safeName);
-        Path targetDir = Paths.get(UploadConfig.UPLOAD_DIR);
-        Path targetPath = targetDir.resolve(storedName);
-
-        UploadConfig.ensureUploadDirectoryExists();
-
-        try {
-            Files.copy(fileStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            MediaFile fileRecord = new MediaFile(userId, storedName, safeName, contentType, fileSize, targetPath.toString());
-            return MediaFileDaoImpl.getInstance().add(fileRecord);
+            Path dir = Paths.get(props.getDir());
+            if (!Files.exists(dir)) {
+                Files.createDirectories(dir);
+                LOGGER.info("Upload directory created: {}", dir.toAbsolutePath());
+            }
         } catch (IOException e) {
-            LOGGER.error("Failed to save file to disk: {}", targetPath, e);
-            throw new ServiceException("File storage failed", e);
+            LOGGER.error("Could not create upload directory: {}", props.getDir(), e);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // MediaFileService implementation
+    // ----------------------------------------------------------------
+
+    @Override
+    public List<MediaFile> findByUserId(Long userId) throws ServiceException {
+        try {
+            return fileDao.findByUserId(userId);
         } catch (DaoException e) {
-            try { Files.deleteIfExists(targetPath); } catch (IOException ignored) {}
-            LOGGER.error("Database error during file upload", e);
-            throw new ServiceException("Database error during file upload", e);
+            throw new ServiceException("Error fetching files for userId=" + userId, e);
         }
     }
 
     @Override
-    public boolean deleteFile(int fileId, Long userId) throws ServiceException {
+    public Optional<MediaFile> findById(long id) throws ServiceException {
         try {
-            MediaFileDao dao = MediaFileDaoImpl.getInstance();
-            var fileOpt = dao.findById(fileId);
-            if (fileOpt.isEmpty()) return false;
-            MediaFile file = fileOpt.get();
-            if (!file.getUserId().equals(userId)) {
-                LOGGER.warn("Unauthorized delete attempt for file: {}", fileId);
+            return fileDao.findById(id);
+        } catch (DaoException e) {
+            throw new ServiceException("Error finding file id=" + id, e);
+        }
+    }
+
+    @Override
+    public MediaFile upload(MultipartFile multipartFile, Long userId) throws ServiceException {
+        if (multipartFile == null || multipartFile.isEmpty()) {
+            throw new ServiceException("Uploaded file must not be empty");
+        }
+
+        String originalName  = multipartFile.getOriginalFilename();
+        String storedName    = FileNameGenerator.generate(originalName);
+        Path   storedPath    = Paths.get(props.getDir(), storedName);
+
+        try {
+            Files.copy(multipartFile.getInputStream(), storedPath);
+        } catch (IOException e) {
+            throw new ServiceException("Failed to save file to disk", e);
+        }
+
+        MediaFile file = new MediaFile();
+        file.setUserId(userId);
+        file.setOriginalFilename(originalName);
+        file.setStoredFilename(storedName);
+        file.setContentType(multipartFile.getContentType());
+        file.setFileSize(multipartFile.getSize());
+        file.setFilePath(storedPath.toString());
+
+        try {
+            boolean saved = fileDao.add(file);
+            if (!saved) {
+                deleteFromDisk(storedPath);
+                throw new ServiceException("Database insert failed for file: " + originalName);
+            }
+        } catch (DaoException e) {
+            deleteFromDisk(storedPath);
+            throw new ServiceException("Error saving file metadata", e);
+        }
+
+        LOGGER.info("File uploaded: original='{}', stored='{}', userId={}",
+                originalName, storedName, userId);
+        return file;
+    }
+
+    @Override
+    public boolean delete(long fileId, Long userId) throws ServiceException {
+        try {
+            Optional<MediaFile> fileOpt = fileDao.findById(fileId);
+            if (fileOpt.isEmpty()) {
                 return false;
             }
-            boolean dbDeleted = dao.deleteById(fileId, userId);
-            if (dbDeleted) {
-                try { Files.deleteIfExists(Paths.get(file.getFilePath())); }
-                catch (IOException e) { LOGGER.warn("Failed to delete physical file: {}", file.getFilePath(), e); }
+            MediaFile file = fileOpt.get();
+            if (!file.getUserId().equals(userId)) {
+                LOGGER.warn("Delete denied: userId={} attempted to delete fileId={} owned by {}",
+                        userId, fileId, file.getUserId());
+                return false;
             }
-            return dbDeleted;
+
+            boolean deleted = fileDao.deleteById(fileId, userId);
+            if (deleted) {
+                deleteFromDisk(Paths.get(file.getFilePath()));
+                LOGGER.info("File deleted: id={}, userId={}", fileId, userId);
+            }
+            return deleted;
         } catch (DaoException e) {
-            throw new ServiceException("File deletion failed", e);
+            throw new ServiceException("Error deleting file id=" + fileId, e);
         }
     }
 
-    @Override
-    public MediaFile getFileForDownload(int fileId, Long userId) throws ServiceException {
+    // ----------------------------------------------------------------
+    // Internal helpers
+    // ----------------------------------------------------------------
+
+    private void deleteFromDisk(Path path) {
         try {
-            var fileOpt = MediaFileDaoImpl.getInstance().findById(fileId);
-            if (fileOpt.isEmpty()) return null;
-            MediaFile file = fileOpt.get();
-            if (!file.getUserId().equals(userId)) {
-                LOGGER.warn("Unauthorized download attempt for file: {}", fileId);
-                return null;
-            }
-            return file;
-        } catch (DaoException e) {
-            throw new ServiceException("Failed to retrieve file metadata", e);
+            Files.deleteIfExists(path);
+        } catch (IOException e) {
+            LOGGER.warn("Could not delete file from disk: {}", path, e);
         }
     }
 }

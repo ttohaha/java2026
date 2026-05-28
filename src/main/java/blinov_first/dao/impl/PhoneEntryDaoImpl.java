@@ -3,245 +3,211 @@ package blinov_first.dao.impl;
 import blinov_first.dao.PhoneEntryDao;
 import blinov_first.entity.PhoneEntry;
 import blinov_first.exception.DaoException;
-import blinov_first.pool.ConnectionPool;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JDBC implementation of {@link PhoneEntryDao} using Spring {@link JdbcTemplate}.
+ *
+ * PATTERN — Singleton: @Repository ensures one instance per Spring context.
+ */
+@Repository
 public class PhoneEntryDaoImpl implements PhoneEntryDao {
 
     private static final Logger LOGGER = LogManager.getLogger(PhoneEntryDaoImpl.class);
-    private static final PhoneEntryDaoImpl INSTANCE = new PhoneEntryDaoImpl();
 
-    private static final String INSERT_ENTRY =
-            "INSERT INTO phone_entries (user_id, contact_name, contact_phone, contact_email) " +
-                    "VALUES (?, ?, ?, ?)";
+    private static PhoneEntryDaoImpl INSTANCE;
 
-    private static final String SELECT_BY_ID =
-            "SELECT id, user_id, contact_name, contact_phone, contact_email, created_at, updated_at " +
-                    "FROM phone_entries WHERE id = ?";
+    private final JdbcTemplate jdbc;
 
-    private static final String SELECT_BY_USER_ID =
-            "SELECT id, user_id, contact_name, contact_phone, contact_email, created_at, updated_at " +
-                    "FROM phone_entries WHERE user_id = ? ORDER BY contact_name";
+    public PhoneEntryDaoImpl(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+        INSTANCE  = this;
+    }
 
-    private static final String SELECT_BY_USER_ID_PAGED =
-            "SELECT id, user_id, contact_name, contact_phone, contact_email, created_at, updated_at " +
-                    "FROM phone_entries WHERE user_id = ? ORDER BY contact_name LIMIT ? OFFSET ?";
-
-    private static final String COUNT_BY_USER_ID =
-            "SELECT COUNT(*) FROM phone_entries WHERE user_id = ?";
-
-    private static final String UPDATE_ENTRY =
-            "UPDATE phone_entries SET contact_name = ?, contact_phone = ?, contact_email = ?, " +
-                    "updated_at = NOW() WHERE id = ?";
-
-    private static final String DELETE_BY_ID =
-            "DELETE FROM phone_entries WHERE id = ?";
-
-    private static final String DELETE_ALL_BY_USER_ID =
-            "DELETE FROM phone_entries WHERE user_id = ?";
-
-    private static final String SEARCH_BY_USER_ID_AND_QUERY =
-            "SELECT id, user_id, contact_name, contact_phone, contact_email, created_at, updated_at " +
-                    "FROM phone_entries " +
-                    "WHERE user_id = ? AND (contact_name LIKE ? OR contact_phone LIKE ?) " +
-                    "ORDER BY contact_name LIMIT ?";
-
-    private PhoneEntryDaoImpl() {}
-
+    /** @deprecated Prefer Spring injection. */
+    @Deprecated
     public static PhoneEntryDaoImpl getInstance() {
         return INSTANCE;
     }
 
-    @Override
-    public boolean add(PhoneEntry entry) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(
-                     INSERT_ENTRY, Statement.RETURN_GENERATED_KEYS)) {
+    // ----------------------------------------------------------------
+    // SQL constants
+    // ----------------------------------------------------------------
 
-            stmt.setLong(1, entry.getUserId());
-            stmt.setString(2, entry.getContactName());
-            stmt.setString(3, entry.getContactPhone());
-            stmt.setString(4, entry.getContactEmail());
+    private static final String SELECT_BASE =
+            "SELECT id, user_id, contact_name, contact_phone, contact_email, created_at " +
+            "FROM phone_book";
 
-            int rows = stmt.executeUpdate();
-            if (rows > 0) {
-                try (ResultSet keys = stmt.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        entry.setId(keys.getInt(1));
-                    }
-                }
-            }
-            return rows > 0;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to insert phone entry for user: {}", entry.getUserId(), e);
-            throw new DaoException("Database error during phone entry insertion", e);
+    private static final String SELECT_BY_ID =
+            SELECT_BASE + " WHERE id = ? AND user_id = ?";
+
+    private static final String SELECT_BY_USER =
+            SELECT_BASE + " WHERE user_id = ? ORDER BY contact_name";
+
+    private static final String SELECT_BY_USER_PAGED =
+            SELECT_BASE + " WHERE user_id = ? ORDER BY contact_name LIMIT ? OFFSET ?";
+
+    private static final String COUNT_BY_USER =
+            "SELECT COUNT(*) FROM phone_book WHERE user_id = ?";
+
+    private static final String SEARCH =
+            SELECT_BASE +
+            " WHERE user_id = ? AND (" +
+            "  contact_name  LIKE ? OR" +
+            "  contact_phone LIKE ? OR" +
+            "  contact_email LIKE ?) " +
+            "ORDER BY contact_name";
+
+    private static final String INSERT_ENTRY =
+            "INSERT INTO phone_book (user_id, contact_name, contact_phone, contact_email, created_at) " +
+            "VALUES (?, ?, ?, ?, NOW())";
+
+    private static final String UPDATE_ENTRY =
+            "UPDATE phone_book SET contact_name = ?, contact_phone = ?, contact_email = ? " +
+            "WHERE id = ? AND user_id = ?";
+
+    private static final String DELETE_BY_ID =
+            "DELETE FROM phone_book WHERE id = ? AND user_id = ?";
+
+    // ----------------------------------------------------------------
+    // RowMapper
+    // ----------------------------------------------------------------
+
+    private static final RowMapper<PhoneEntry> ROW_MAPPER = (rs, rowNum) -> {
+        PhoneEntry e = new PhoneEntry();
+        e.setId(rs.getLong("id"));
+        e.setUserId(rs.getLong("user_id"));
+        e.setContactName(rs.getString("contact_name"));
+        e.setContactPhone(rs.getString("contact_phone"));
+        e.setContactEmail(rs.getString("contact_email"));
+        Timestamp ts = rs.getTimestamp("created_at");
+        if (ts != null) {
+            e.setCreatedAt(ts.toLocalDateTime());
         }
-    }
+        return e;
+    };
+
+    // ----------------------------------------------------------------
+    // PhoneEntryDao implementation
+    // ----------------------------------------------------------------
 
     @Override
-    public Optional<PhoneEntry> findById(int id) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_ID)) {
-
-            stmt.setInt(1, id);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to find phone entry by id: {}", id, e);
-            throw new DaoException("Database error during findById", e);
+    public Optional<PhoneEntry> findById(long id) throws DaoException {
+        try {
+            List<PhoneEntry> rows = jdbc.query(
+                    SELECT_BASE + " WHERE id = ?", ROW_MAPPER, id);
+            return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+        } catch (DataAccessException ex) {
+            LOGGER.error("findById failed for id={}", id, ex);
+            throw new DaoException("Database error in findById", ex);
         }
-        return Optional.empty();
     }
 
     @Override
     public List<PhoneEntry> findByUserId(Long userId) throws DaoException {
-        List<PhoneEntry> entries = new ArrayList<>();
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_USER_ID)) {
-
-            stmt.setLong(1, userId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to fetch entries for user: {}", userId, e);
-            throw new DaoException("Database error during findByUserId", e);
+        try {
+            return jdbc.query(SELECT_BY_USER, ROW_MAPPER, userId);
+        } catch (DataAccessException ex) {
+            LOGGER.error("findByUserId failed for userId={}", userId, ex);
+            throw new DaoException("Database error in findByUserId", ex);
         }
-        return entries;
     }
 
     @Override
-    public List<PhoneEntry> findByUserIdPaged(Long userId, int offset, int limit) throws DaoException {
-        List<PhoneEntry> entries = new ArrayList<>();
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_USER_ID_PAGED)) {
-
-            stmt.setLong(1, userId);
-            stmt.setInt(2, limit);
-            stmt.setInt(3, offset);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to fetch paged entries for user: {}", userId, e);
-            throw new DaoException("Database error during findByUserIdPaged", e);
+    public List<PhoneEntry> findByUserIdPaged(Long userId, int offset, int limit)
+            throws DaoException {
+        try {
+            return jdbc.query(SELECT_BY_USER_PAGED, ROW_MAPPER, userId, limit, offset);
+        } catch (DataAccessException ex) {
+            LOGGER.error("findByUserIdPaged failed for userId={}", userId, ex);
+            throw new DaoException("Database error in findByUserIdPaged", ex);
         }
-        return entries;
     }
 
     @Override
     public int countByUserId(Long userId) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(COUNT_BY_USER_ID)) {
+        try {
+            Integer count = jdbc.queryForObject(COUNT_BY_USER, Integer.class, userId);
+            return count != null ? count : 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("countByUserId failed for userId={}", userId, ex);
+            throw new DaoException("Database error in countByUserId", ex);
+        }
+    }
 
-            stmt.setLong(1, userId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
+    @Override
+    public List<PhoneEntry> searchByUserIdAndQuery(Long userId, String query)
+            throws DaoException {
+        try {
+            String pattern = "%" + query + "%";
+            return jdbc.query(SEARCH, ROW_MAPPER,
+                    userId, pattern, pattern, pattern);
+        } catch (DataAccessException ex) {
+            LOGGER.error("search failed for userId={}, query={}", userId, query, ex);
+            throw new DaoException("Database error in search", ex);
+        }
+    }
+
+    @Override
+    public boolean add(PhoneEntry entry) throws DaoException {
+        try {
+            KeyHolder keys = new GeneratedKeyHolder();
+            int rows = jdbc.update(con -> {
+                PreparedStatement ps = con.prepareStatement(
+                        INSERT_ENTRY, Statement.RETURN_GENERATED_KEYS);
+                ps.setLong(1, entry.getUserId());
+                ps.setString(2, entry.getContactName());
+                ps.setString(3, entry.getContactPhone());
+                ps.setString(4, entry.getContactEmail());
+                return ps;
+            }, keys);
+
+            if (rows > 0 && keys.getKey() != null) {
+                entry.setId(keys.getKey().longValue());
             }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to count entries for user: {}", userId, e);
-            throw new DaoException("Database error during countByUserId", e);
+            return rows > 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("add failed for entry={}", entry, ex);
+            throw new DaoException("Database error in add", ex);
         }
     }
 
     @Override
     public boolean update(PhoneEntry entry) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(UPDATE_ENTRY)) {
-
-            stmt.setString(1, entry.getContactName());
-            stmt.setString(2, entry.getContactPhone());
-            stmt.setString(3, entry.getContactEmail());
-            stmt.setInt(4, (int) entry.getId());
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to update phone entry id: {}", entry.getId(), e);
-            throw new DaoException("Database error during update", e);
+        try {
+            int rows = jdbc.update(UPDATE_ENTRY,
+                    entry.getContactName(),
+                    entry.getContactPhone(),
+                    entry.getContactEmail(),
+                    entry.getId(),
+                    entry.getUserId());
+            return rows > 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("update failed for id={}", entry.getId(), ex);
+            throw new DaoException("Database error in update", ex);
         }
     }
 
     @Override
-    public boolean deleteById(int id) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(DELETE_BY_ID)) {
-
-            stmt.setInt(1, id);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to delete phone entry id: {}", id, e);
-            throw new DaoException("Database error during delete", e);
+    public boolean deleteById(long id, Long userId) throws DaoException {
+        try {
+            return jdbc.update(DELETE_BY_ID, id, userId) > 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("deleteById failed for id={}", id, ex);
+            throw new DaoException("Database error in deleteById", ex);
         }
-    }
-
-    @Override
-    public List<PhoneEntry> searchByUserIdAndQuery(Long userId, String query, int limit) throws DaoException {
-        List<PhoneEntry> entries = new ArrayList<>();
-        String pattern = "%" + query + "%";
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SEARCH_BY_USER_ID_AND_QUERY)) {
-
-            stmt.setLong(1, userId);
-            stmt.setString(2, pattern);
-            stmt.setString(3, pattern);
-            stmt.setInt(4, limit);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to search entries for user: {} query: '{}'", userId, query, e);
-            throw new DaoException("Database error during search", e);
-        }
-        return entries;
-    }
-
-    @Override
-    public boolean deleteAllByUserId(Long userId) throws DaoException {
-        try (Connection connection = ConnectionPool.getInstance().getConnection();
-             PreparedStatement stmt = connection.prepareStatement(DELETE_ALL_BY_USER_ID)) {
-
-            stmt.setLong(1, userId);
-            stmt.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to delete all entries for user: {}", userId, e);
-            throw new DaoException("Database error during deleteAllByUserId", e);
-        }
-    }
-
-    private PhoneEntry mapRow(ResultSet rs) throws SQLException {
-        PhoneEntry entry = new PhoneEntry();
-        entry.setId(rs.getInt("id"));
-        entry.setUserId(rs.getLong("user_id"));
-        entry.setContactName(rs.getString("contact_name"));
-        entry.setContactPhone(rs.getString("contact_phone"));
-        entry.setContactEmail(rs.getString("contact_email"));
-
-        Timestamp createdAt = rs.getTimestamp("created_at");
-        if (createdAt != null) entry.setCreatedAt(createdAt.toLocalDateTime());
-
-        Timestamp updatedAt = rs.getTimestamp("updated_at");
-        if (updatedAt != null) entry.setUpdatedAt(updatedAt.toLocalDateTime());
-
-        return entry;
     }
 }

@@ -1,22 +1,6 @@
 package blinov_first.exception;
-
+/** Thrown by command classes in the pre-Spring front-controller pattern. */
 public class CommandException extends Exception {
-
-    private static final long serialVersionUID = 1L;
-
-    public CommandException() {
-        super();
-    }
-
-    public CommandException(String message) {
-        super(message);
-    }
-
-    public CommandException(String message, Throwable cause) {
-        super(message, cause);
-    }
-
-    public CommandException(Throwable cause) {
-        super(cause);
-    }
+    public CommandException(String message)                  { super(message); }
+    public CommandException(String message, Throwable cause) { super(message, cause); }
 }

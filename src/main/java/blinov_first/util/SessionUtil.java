@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Optional;
+
 public final class SessionUtil {
 
     private static final Logger LOGGER = LogManager.getLogger(SessionUtil.class);
@@ -20,35 +22,43 @@ public final class SessionUtil {
         return loggedIn;
     }
 
-    public static Long getUserId(HttpServletRequest request) {
+    public static Optional<Long> getUserId(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session == null) {
             LOGGER.debug("getSession(false) returned null");
-            return null;
+            return Optional.empty();
         }
-        Object userIdObj = session.getAttribute(AttributeName.USER_ID);
-        LOGGER.debug("Raw userId from session: {} (type: {})", userIdObj, userIdObj != null ? userIdObj.getClass().getName() : "null");
+        Object raw = session.getAttribute(AttributeName.USER_ID);
+        LOGGER.debug("Raw userId from session: {} (type: {})",
+                raw, raw != null ? raw.getClass().getName() : "null");
 
-        if (userIdObj instanceof Long) {
-            return (Long) userIdObj;
-        } else if (userIdObj instanceof Integer) {
-            return ((Integer) userIdObj).longValue();
-        } else if (userIdObj instanceof String) {
+        if (raw instanceof Long) {
+            return Optional.of((Long) raw);
+        }
+        if (raw instanceof Integer) {
+            return Optional.of(((Integer) raw).longValue());
+        }
+        if (raw instanceof String) {
             try {
-                return Long.parseLong((String) userIdObj);
+                return Optional.of(Long.parseLong((String) raw));
             } catch (NumberFormatException e) {
-                LOGGER.warn("Failed to parse user id from session: {}", userIdObj);
-                return null;
+                LOGGER.warn("Failed to parse userId from session: {}", raw);
+                return Optional.empty();
             }
         }
-        return null;
+        return Optional.empty();
     }
 
-    public static String getLogin(HttpServletRequest request) {
+    public static Optional<String> getLogin(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
-        if (session == null) return null;
-        Object loginObj = session.getAttribute(AttributeName.LOGIN);
-        return (loginObj instanceof String) ? (String) loginObj : null;
+        if (session == null) {
+            return Optional.empty();
+        }
+        Object raw = session.getAttribute(AttributeName.LOGIN);
+        if (raw instanceof String) {
+            return Optional.of((String) raw);
+        }
+        return Optional.empty();
     }
 
     public static void invalidate(HttpServletRequest request) {

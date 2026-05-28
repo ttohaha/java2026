@@ -25,5 +25,15 @@ public final class AttributeName {
     public static final String TG_BOT_CONFIGURED  = "tgBotConfigured";
     public static final String TG_BOT_USERNAME    = "tgBotUsername";
 
+    public static final String CONTACT_NAME   = "contactName";
+    public static final String CONTACT_PHONE  = "contactPhone";
+    public static final String CONTACT_EMAIL  = "contactEmail";
+    public static final String PARAM_LASTNAME = "lastname";
+    public static final String PARAM_PHONE    = "phone";
+
+    public static final String REDIRECT_LIST_ENTRIES  = "redirect:/controller?command=list_entries";
+    public static final String REDIRECT_LIST_FILES    = "redirect:/controller?command=list_files";
+    public static final String REDIRECT_EDIT_PROFILE  = "redirect:/controller?command=edit_profile";
+
     private AttributeName() {}
 }

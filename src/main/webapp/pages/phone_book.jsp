@@ -1,135 +1,132 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <%@ taglib prefix="c"   uri="jakarta.tags.core" %>
-<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
-<%@ taglib prefix="pb"  uri="http://blinov.first/tags" %>
-<%@ include file="fragments/locale_setup.jsp" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt"  %>
 <!DOCTYPE html>
-<html lang="${lang}">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><fmt:message key="phonebook.title"/> — <fmt:message key="app.title"/></title>
-    <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css">
+    <title>Phone Book</title>
+    <link rel="stylesheet" href="${pageContext.request.contextPath}/css/style.css">
 </head>
-<body class="app-page">
+<body>
+
 <%@ include file="fragments/navbar.jsp" %>
-<div class="page-wrapper">
-    <div class="page-header">
-        <h2><fmt:message key="phonebook.heading"/></h2>
-        <a href="${pageContext.request.contextPath}/controller?command=add_entry" class="btn btn-outline">
-            &#43; <fmt:message key="phonebook.add"/>
-        </a>
-    </div>
 
-    <pb:alert type="danger"  message="${errorMsg}"/>
-    <pb:alert type="success" message="${successMsg}"/>
+<div class="container">
+    <h2>Phone Book</h2>
 
-    <%-- AJAX live search bar --%>
+    <c:if test="${not empty successMessage}">
+        <div class="alert alert-success">${successMessage}</div>
+    </c:if>
+    <c:if test="${not empty errorMessage}">
+        <div class="alert alert-error">${errorMessage}</div>
+    </c:if>
+
+    <%-- Search bar --%>
     <div class="search-bar">
-        <input type="search"
-               id="ajaxSearch"
-               class="form-control"
-               placeholder="Search by name or phone…"
-               autocomplete="off"
-               data-search-url="${pageContext.request.contextPath}/controller?command=search_entries"/>
-        <span id="ajaxSearchSpinner" class="search-spinner" hidden>&#8987;</span>
+        <input type="text" id="searchInput" placeholder="Search by name, phone or email..."
+               oninput="searchEntries(this.value)">
     </div>
 
-    <div class="table-wrapper">
-        <%-- Static table (shown on page load / no JS) --%>
-        <div id="staticTable">
-            <c:choose>
-                <c:when test="${empty entryList}">
-                    <div class="empty-state">
-                        <div class="empty-icon">&#128222;</div>
-                        <p><fmt:message key="phonebook.empty"/></p>
-                        <a href="${pageContext.request.contextPath}/controller?command=add_entry"
-                           class="btn btn-outline"><fmt:message key="phonebook.add"/></a>
-                    </div>
-                </c:when>
-                <c:otherwise>
-                    <fmt:message key="phonebook.delete.confirm" var="deleteConfirm"/>
-                    <fmt:message key="phonebook.edit"           var="editLabel"/>
-                    <fmt:message key="phonebook.delete"         var="deleteLabel"/>
-                    <table class="data-table">
-                        <thead><tr>
-                            <th><fmt:message key="phonebook.col.name"/></th>
-                            <th><fmt:message key="phonebook.col.phone"/></th>
-                            <th><fmt:message key="phonebook.col.email"/></th>
-                            <th><fmt:message key="phonebook.col.actions"/></th>
-                        </tr></thead>
-                        <tbody id="entriesTableBody">
-                        <c:forEach var="entry" items="${entryList}">
-                            <tr id="entry-row-${entry.id}">
-                                <td><strong>${entry.contactName}</strong></td>
-                                <td>${entry.contactPhone}</td>
-                                <td>${entry.contactEmail}</td>
-                                <td>
-                                    <div class="table-actions">
-                                        <pb:actionLink
-                                                href="${pageContext.request.contextPath}/controller?command=edit_entry&entryId=${entry.id}"
-                                                label="${editLabel}"
-                                                style="outline"/>
-                                        <button type="button"
-                                                class="btn btn-danger btn-ajax-delete"
-                                                data-entry-id="${entry.id}"
-                                                data-confirm="${deleteConfirm}"
-                                                data-delete-url="${pageContext.request.contextPath}/controller?command=delete_entry">
-                                                ${deleteLabel}
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </c:forEach>
-                        </tbody>
-                    </table>
-
-                    <c:if test="${entriesPage.totalPages > 1}">
-                        <c:set var="totalPages"  value="${entriesPage.totalPages}"/>
-                        <c:set var="currentPage" value="${entriesPage.currentPage}"/>
-                        <div class="pagination" id="paginationBlock">
-                            <c:if test="${entriesPage.previousAvailable}">
-                                <a href="${pageContext.request.contextPath}/controller?command=list_entries&page=${entriesPage.previousPage}"
-                                   class="page-btn">&#8592;</a>
-                            </c:if>
-
-                            <c:forEach begin="1" end="${totalPages}" var="i">
-                                <a href="${pageContext.request.contextPath}/controller?command=list_entries&page=${i}"
-                                   class="page-btn ${i == currentPage ? 'active' : ''}">${i}</a>
-                            </c:forEach>
-
-                            <c:if test="${entriesPage.nextAvailable}">
-                                <a href="${pageContext.request.contextPath}/controller?command=list_entries&page=${entriesPage.nextPage}"
-                                   class="page-btn">&#8594;</a>
-                            </c:if>
-
-                            <span class="page-info">
-                            ${currentPage} / ${totalPages}
-                            (<fmt:message key="phonebook.total"/>: ${entriesPage.totalItems})
-                        </span>
-                        </div>
-                    </c:if>
-                </c:otherwise>
-            </c:choose>
-        </div>
-
-        <%-- AJAX search results table (hidden until search is active) --%>
-        <div id="ajaxResultsBlock" hidden>
-            <table class="data-table">
-                <thead><tr>
-                    <th><fmt:message key="phonebook.col.name"/></th>
-                    <th><fmt:message key="phonebook.col.phone"/></th>
-                    <th><fmt:message key="phonebook.col.email"/></th>
-                    <th><fmt:message key="phonebook.col.actions"/></th>
-                </tr></thead>
-                <tbody id="ajaxResultsBody"></tbody>
-            </table>
-            <p id="ajaxNoResults" hidden class="empty-state-text">No contacts found.</p>
-        </div>
+    <%-- Sort controls --%>
+    <div class="sort-bar">
+        Sort by:
+        <a href="${pageContext.request.contextPath}/phonebook?sort=alphabetical
+                &page=${currentPage}" class="${sort == 'alphabetical' ? 'active' : ''}">Name</a>
+        |
+        <a href="${pageContext.request.contextPath}/phonebook?sort=phoneNumber
+                &page=${currentPage}" class="${sort == 'phoneNumber' ? 'active' : ''}">Phone</a>
+        |
+        <a href="${pageContext.request.contextPath}/phonebook?sort=dateAdded
+                &page=${currentPage}" class="${sort == 'dateAdded' ? 'active' : ''}">Date added</a>
     </div>
+
+    <%-- Entry table --%>
+    <table id="entriesTable" class="data-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="entriesBody">
+        <c:forEach var="entry" items="${entries}" varStatus="st">
+            <tr id="row-${entry.id}">
+                <td>${(currentPage - 1) * 6 + st.index + 1}</td>
+                <td>${entry.contactName}</td>
+                <td>${entry.contactPhone}</td>
+                <td>${entry.contactEmail}</td>
+                <td class="actions">
+                    <a href="${pageContext.request.contextPath}/phonebook/edit?entryId=${entry.id}"
+                       class="btn btn-sm btn-edit">Edit</a>
+
+                    <form method="post"
+                          action="${pageContext.request.contextPath}/phonebook/delete"
+                          style="display:inline"
+                          onsubmit="return confirm('Delete this contact?');">
+                        <input type="hidden" name="entryId" value="${entry.id}">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        </c:forEach>
+        </tbody>
+    </table>
+
+    <%-- Pagination --%>
+    <div class="pagination">
+        <c:if test="${currentPage > 1}">
+            <a href="${pageContext.request.contextPath}/phonebook?page=${currentPage - 1}&sort=${sort}">
+                &laquo; Prev
+            </a>
+        </c:if>
+        <c:forEach begin="1" end="${totalPages}" var="p">
+            <a href="${pageContext.request.contextPath}/phonebook?page=${p}&sort=${sort}"
+               class="${p == currentPage ? 'active' : ''}">${p}</a>
+        </c:forEach>
+        <c:if test="${currentPage < totalPages}">
+            <a href="${pageContext.request.contextPath}/phonebook?page=${currentPage + 1}&sort=${sort}">
+                Next &raquo;
+            </a>
+        </c:if>
+    </div>
+
+    <a href="${pageContext.request.contextPath}/phonebook/add"
+       class="btn btn-primary" style="margin-top:16px;">+ Add Contact</a>
 </div>
 
-<script src="${pageContext.request.contextPath}/js/script.js"></script>
-<script src="${pageContext.request.contextPath}/js/phonebook-ajax.js"></script>
+<script>
+    const ctx = '${pageContext.request.contextPath}';
+
+    function searchEntries(query) {
+        if (query.length < 1) {
+            document.getElementById('entriesBody').innerHTML = '';
+            location.reload();
+            return;
+        }
+        fetch(ctx + '/phonebook/search?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.getElementById('entriesBody');
+                tbody.innerHTML = '';
+                data.forEach((e, i) => {
+                    tbody.innerHTML +=
+                        '<tr>' +
+                        '<td>' + (i + 1) + '</td>' +
+                        '<td>' + (e.contactName  || '') + '</td>' +
+                        '<td>' + (e.contactPhone || '') + '</td>' +
+                        '<td>' + (e.contactEmail || '') + '</td>' +
+                        '<td>' +
+                          '<a href="' + ctx + '/phonebook/edit?entryId=' + e.id +
+                             '" class="btn btn-sm btn-edit">Edit</a>' +
+                        '</td>' +
+                        '</tr>';
+                });
+            });
+    }
+</script>
 </body>
 </html>

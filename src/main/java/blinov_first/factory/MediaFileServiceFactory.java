@@ -1,26 +1,13 @@
 package blinov_first.factory;
 
-import blinov_first.service.MediaFileService;
-import blinov_first.service.impl.MediaFileServiceImpl;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+/**
+ * Factory that created a {@code MediaFileServiceImpl} in the pre-Spring version.
+ *
+ * Replaced by {@code MediaFileServiceImpl} annotated with {@code @Service}.
+ *
+ * @deprecated Replaced by Spring DI.
+ */
+@Deprecated
 public final class MediaFileServiceFactory {
-
-    private static final Logger LOGGER = LogManager.getLogger(MediaFileServiceFactory.class);
-    private static volatile MediaFileService instance;
-
     private MediaFileServiceFactory() {}
-
-    public static MediaFileService getMediaFileService() {
-        if (instance == null) {
-            synchronized (MediaFileServiceFactory.class) {
-                if (instance == null) {
-                    instance = MediaFileServiceImpl.getInstance();
-                    LOGGER.info("MediaFileService instance created via factory");
-                }
-            }
-        }
-        return instance;
-    }
 }

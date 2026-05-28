@@ -2,15 +2,29 @@ package blinov_first.service;
 
 import blinov_first.entity.User;
 import blinov_first.exception.ServiceException;
+
 import java.util.List;
+import java.util.Optional;
 
 public interface UserService {
-    List<User> findAllUsers() throws ServiceException;
-    boolean authenticate(String login, String password) throws ServiceException;
-    boolean registerNewUser(String login, String password, String email) throws ServiceException;
-    boolean updateUserProfile(int userId, String lastname, String phone, String email) throws ServiceException;
-    // === New methods for email confirmation ===
-    boolean registerWithConfirmation(String login, String password, String email) throws ServiceException;
-    String  registerAndGetToken(String login, String password, String email) throws ServiceException;
+
+    Optional<User> findById(long id) throws ServiceException;
+
+    List<User> findAll() throws ServiceException;
+
+    /**
+     * Registers a new user, generates a confirmation token and publishes
+     * a {@code UserRegisteredEvent} so listeners can send a confirmation email.
+     */
+    boolean register(String login, String rawPassword,
+                     String email, String phone) throws ServiceException;
+
+    /**
+     * Activates the account identified by the given confirmation token.
+     *
+     * @return {@code true} if a matching pending account was found and activated
+     */
     boolean confirmRegistration(String token) throws ServiceException;
+
+    boolean update(User user) throws ServiceException;
 }

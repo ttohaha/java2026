@@ -1,154 +1,119 @@
 package blinov_first.service.impl;
 
 import blinov_first.dao.UserDao;
-import blinov_first.dao.impl.UserDaoImpl;
 import blinov_first.entity.User;
+import blinov_first.event.UserRegisteredEvent;
 import blinov_first.exception.DaoException;
 import blinov_first.exception.ServiceException;
-import blinov_first.factory.MailServiceFactory;
-import blinov_first.service.MailService;
 import blinov_first.service.UserService;
 import blinov_first.util.TokenGenerator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Default implementation of {@link UserService}.
+ *
+ * PATTERN — Singleton:   @Service — one instance per context.
+ * PATTERN — Observer:    publishes {@link UserRegisteredEvent} after registration;
+ *                        listeners react without this class knowing about them.
+ */
+@Service
 public class UserServiceImpl implements UserService {
 
     private static final Logger LOGGER = LogManager.getLogger(UserServiceImpl.class);
-    private static final UserServiceImpl INSTANCE = new UserServiceImpl();
 
-    private UserServiceImpl() {}
+    private static UserServiceImpl INSTANCE;
 
+    private final UserDao                  userDao;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public UserServiceImpl(UserDao userDao, ApplicationEventPublisher eventPublisher) {
+        this.userDao        = userDao;
+        this.eventPublisher = eventPublisher;
+        INSTANCE            = this;
+    }
+
+    /** @deprecated Prefer Spring injection. */
+    @Deprecated
     public static UserServiceImpl getInstance() {
         return INSTANCE;
     }
 
+    // ----------------------------------------------------------------
+    // UserService implementation
+    // ----------------------------------------------------------------
+
     @Override
-    public boolean authenticate(String login, String password) throws ServiceException {
-        if (login == null || password == null) {
-            return false;
-        }
+    public Optional<User> findById(long id) throws ServiceException {
         try {
-            UserDao userDao = UserDaoImpl.getInstance();
-            if (!userDao.isUserActive(login)) {
-                return false;
-            }
-            return userDao.authenticate(login, password);
+            return userDao.findById(id);
         } catch (DaoException e) {
-            throw new ServiceException("Authentication service error", e);
+            throw new ServiceException("Error finding user by id=" + id, e);
         }
     }
 
     @Override
-    public boolean updateUserProfile(int userId, String lastname, String phone, String email)
-            throws ServiceException {
+    public List<User> findAll() throws ServiceException {
         try {
-            return UserDaoImpl.getInstance().updateProfile(userId, lastname, phone, email);
+            return userDao.findAll();
         } catch (DaoException e) {
-            LOGGER.error("Profile update failed for user id: {}", userId, e);
-            throw new ServiceException("Profile update failed", e);
+            throw new ServiceException("Error fetching all users", e);
         }
     }
 
     @Override
-    public boolean registerNewUser(String login, String password, String email)
-            throws ServiceException {
-        return registerWithConfirmation(login, password, email);
-    }
-
-    @Override
-    public boolean registerWithConfirmation(String login, String password, String email)
-            throws ServiceException {
-        if (isInvalidData(login, password, email)) {
-            return false;
-        }
-
-        UserDao userDao = UserDaoImpl.getInstance();
+    public boolean register(String login, String rawPassword,
+                            String email, String phone) throws ServiceException {
         try {
-            if (userDao.findByLogin(login).isPresent()) {
+            Optional<User> existing = userDao.findByLogin(login);
+            if (existing.isPresent()) {
+                LOGGER.warn("Registration attempt with existing login: {}", login);
                 return false;
             }
 
-            User newUser = new User(login, password, email);
-            newUser.setActive(false);
+            String token = TokenGenerator.generate();
 
-            if (!userDao.add(newUser)) {
-                return false;
+            User user = new User();
+            user.setLastname(login);
+            user.setPassword(rawPassword);    // hashed by SQL SHA2(?, 256) in DAO
+            user.setEmail(email);
+            user.setPhone(phone);
+            user.setActive(false);
+            user.setRole("USER");
+            user.setConfirmationToken(token);
+
+            boolean saved = userDao.add(user);
+            if (saved) {
+                // Observer pattern: notify listeners (e.g. MailEventListener)
+                eventPublisher.publishEvent(new UserRegisteredEvent(this, user, token));
+                LOGGER.info("User registered: login={}, email={}", login, email);
             }
-
-            String token = TokenGenerator.generateSecureToken();
-            if (!userDao.saveConfirmationToken(login, token)) {
-                throw new ServiceException("Failed to save confirmation token");
-            }
-
-            MailService mailService = MailServiceFactory.getMailService();
-            mailService.sendConfirmationEmail(newUser, token);
-
-            return true;
+            return saved;
         } catch (DaoException e) {
-            throw new ServiceException("Registration service error", e);
+            throw new ServiceException("Error during registration", e);
         }
     }
 
     @Override
     public boolean confirmRegistration(String token) throws ServiceException {
-        if (token == null || token.isEmpty()) {
-            return false;
-        }
         try {
-            return UserDaoImpl.getInstance().activateUserByToken(token);
+            return userDao.activateByToken(token);
         } catch (DaoException e) {
-            throw new ServiceException("Confirmation service error", e);
+            throw new ServiceException("Error confirming registration", e);
         }
     }
 
     @Override
-    public String registerAndGetToken(String login, String password, String email)
-            throws ServiceException {
-        if (isInvalidData(login, password, email)) {
-            return null;
-        }
+    public boolean update(User user) throws ServiceException {
         try {
-            UserDao dao = UserDaoImpl.getInstance();
-            if (dao.findByLogin(login).isPresent()) {
-                return null;
-            }
-
-            User newUser = new User(login, password, email);
-            newUser.setActive(false);
-
-            if (!dao.add(newUser)) {
-                return null;
-            }
-
-            String token = TokenGenerator.generateSecureToken();
-            if (!dao.saveConfirmationToken(login, token)) {
-                throw new ServiceException("Failed to save confirmation token");
-            }
-
-            MailService mailService = MailServiceFactory.getMailService();
-            mailService.sendConfirmationEmail(newUser, token);
-
-            return token;
+            return userDao.update(user);
         } catch (DaoException e) {
-            throw new ServiceException("Registration service error", e);
+            throw new ServiceException("Error updating user", e);
         }
-    }
-
-    @Override
-    public List<User> findAllUsers() throws ServiceException {
-        try {
-            return UserDaoImpl.getInstance().findAll();
-        } catch (DaoException e) {
-            throw new ServiceException("Failed to fetch users", e);
-        }
-    }
-
-    private boolean isInvalidData(String login, String password, String email) {
-        return login == null || login.length() < 3
-                || password == null || password.length() < 6
-                || email == null || email.isEmpty();
     }
 }

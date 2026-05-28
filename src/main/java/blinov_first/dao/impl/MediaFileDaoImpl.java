@@ -3,130 +3,147 @@ package blinov_first.dao.impl;
 import blinov_first.dao.MediaFileDao;
 import blinov_first.entity.MediaFile;
 import blinov_first.exception.DaoException;
-import blinov_first.pool.ConnectionPool;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JDBC implementation of {@link MediaFileDao} using Spring {@link JdbcTemplate}.
+ *
+ * PATTERN — Singleton: @Repository ensures one instance per Spring context.
+ */
+@Repository
 public class MediaFileDaoImpl implements MediaFileDao {
 
     private static final Logger LOGGER = LogManager.getLogger(MediaFileDaoImpl.class);
-    private static final MediaFileDaoImpl INSTANCE = new MediaFileDaoImpl();
 
-    private static final String INSERT_FILE =
-            "INSERT INTO media_files (user_id, stored_filename, original_filename, content_type, file_size, file_path) VALUES (?, ?, ?, ?, ?, ?)";
-    private static final String SELECT_BY_ID =
-            "SELECT id, user_id, stored_filename, original_filename, content_type, file_size, file_path, upload_date FROM media_files WHERE id = ?";
-    private static final String SELECT_BY_USER_ID =
-            "SELECT id, user_id, stored_filename, original_filename, content_type, file_size, file_path, upload_date FROM media_files WHERE user_id = ?";
-    private static final String DELETE_BY_ID_AND_USER =
-            "DELETE FROM media_files WHERE id = ? AND user_id = ?";
+    private static MediaFileDaoImpl INSTANCE;
 
-    private MediaFileDaoImpl() {}
+    private final JdbcTemplate jdbc;
 
-    public static MediaFileDaoImpl getInstance() { return INSTANCE; }
-
-    @Override
-    public boolean add(MediaFile file) throws DaoException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(INSERT_FILE, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setLong(1, file.getUserId());
-            stmt.setString(2, file.getStoredFilename());
-            stmt.setString(3, file.getOriginalFilename());
-            stmt.setString(4, file.getContentType());
-            stmt.setLong(5, file.getFileSize());
-            stmt.setString(6, file.getFilePath());
-
-            int rows = stmt.executeUpdate();
-            if (rows > 0) {
-                try (ResultSet keys = stmt.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        file.setId(keys.getInt(1));
-                    }
-                }
-            }
-            return rows > 0;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to insert media file record for user: {}", file.getUserId(), e);
-            throw new DaoException("Database error during media file insertion", e);
-        }
+    public MediaFileDaoImpl(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+        INSTANCE  = this;
     }
 
-    @Override
-    public Optional<MediaFile> findById(int id) throws DaoException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_ID)) {
-            stmt.setInt(1, id);
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to find media file by id: {}", id, e);
-            throw new DaoException("Database error during findById", e);
+    /** @deprecated Prefer Spring injection. */
+    @Deprecated
+    public static MediaFileDaoImpl getInstance() {
+        return INSTANCE;
+    }
+
+    // ----------------------------------------------------------------
+    // SQL constants
+    // ----------------------------------------------------------------
+
+    private static final String SELECT_BASE =
+            "SELECT id, user_id, stored_filename, original_filename, " +
+            "       content_type, file_size, file_path, upload_date " +
+            "FROM media_files";
+
+    private static final String SELECT_BY_ID =
+            SELECT_BASE + " WHERE id = ?";
+
+    private static final String SELECT_BY_USER =
+            SELECT_BASE + " WHERE user_id = ? ORDER BY upload_date DESC";
+
+    private static final String INSERT_FILE =
+            "INSERT INTO media_files " +
+            "(user_id, stored_filename, original_filename, content_type, file_size, file_path, upload_date) " +
+            "VALUES (?, ?, ?, ?, ?, ?, NOW())";
+
+    private static final String DELETE_BY_ID =
+            "DELETE FROM media_files WHERE id = ? AND user_id = ?";
+
+    // ----------------------------------------------------------------
+    // RowMapper
+    // ----------------------------------------------------------------
+
+    private static final RowMapper<MediaFile> ROW_MAPPER = (rs, rowNum) -> {
+        MediaFile f = new MediaFile();
+        f.setId(rs.getLong("id"));
+        f.setUserId(rs.getLong("user_id"));
+        f.setStoredFilename(rs.getString("stored_filename"));
+        f.setOriginalFilename(rs.getString("original_filename"));
+        f.setContentType(rs.getString("content_type"));
+        f.setFileSize(rs.getLong("file_size"));
+        f.setFilePath(rs.getString("file_path"));
+        Timestamp ts = rs.getTimestamp("upload_date");
+        if (ts != null) {
+            f.setUploadDate(ts.toLocalDateTime());
         }
-        return Optional.empty();
+        return f;
+    };
+
+    // ----------------------------------------------------------------
+    // MediaFileDao implementation
+    // ----------------------------------------------------------------
+
+    @Override
+    public Optional<MediaFile> findById(long id) throws DaoException {
+        try {
+            List<MediaFile> rows = jdbc.query(SELECT_BY_ID, ROW_MAPPER, id);
+            return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+        } catch (DataAccessException ex) {
+            LOGGER.error("findById failed for id={}", id, ex);
+            throw new DaoException("Database error in findById", ex);
+        }
     }
 
     @Override
     public List<MediaFile> findByUserId(Long userId) throws DaoException {
-        List<MediaFile> files = new ArrayList<>();
-        ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(SELECT_BY_USER_ID)) {
-            stmt.setLong(1, userId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    files.add(mapRow(rs));
-                }
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Failed to fetch media files for user: {}", userId, e);
-            throw new DaoException("Database error during findByUserId", e);
+        try {
+            return jdbc.query(SELECT_BY_USER, ROW_MAPPER, userId);
+        } catch (DataAccessException ex) {
+            LOGGER.error("findByUserId failed for userId={}", userId, ex);
+            throw new DaoException("Database error in findByUserId", ex);
         }
-        return files;
     }
 
     @Override
-    public boolean deleteById(int id, Long userId) throws DaoException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement(DELETE_BY_ID_AND_USER)) {
-            stmt.setInt(1, id);
-            stmt.setLong(2, userId);
-            return stmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            LOGGER.error("Failed to delete media file record: {}", id, e);
-            throw new DaoException("Database error during delete", e);
+    public boolean add(MediaFile file) throws DaoException {
+        try {
+            KeyHolder keys = new GeneratedKeyHolder();
+            int rows = jdbc.update(con -> {
+                PreparedStatement ps = con.prepareStatement(
+                        INSERT_FILE, Statement.RETURN_GENERATED_KEYS);
+                ps.setLong(1, file.getUserId());
+                ps.setString(2, file.getStoredFilename());
+                ps.setString(3, file.getOriginalFilename());
+                ps.setString(4, file.getContentType());
+                ps.setLong(5, file.getFileSize());
+                ps.setString(6, file.getFilePath());
+                return ps;
+            }, keys);
+
+            if (rows > 0 && keys.getKey() != null) {
+                file.setId(keys.getKey().longValue());
+            }
+            return rows > 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("add failed for file={}", file.getOriginalFilename(), ex);
+            throw new DaoException("Database error in add", ex);
         }
     }
 
-    private MediaFile mapRow(ResultSet rs) throws SQLException {
-        MediaFile file = new MediaFile();
-        file.setId(rs.getInt("id"));
-        file.setUserId(rs.getLong("user_id"));
-        file.setStoredFilename(rs.getString("stored_filename"));
-        file.setOriginalFilename(rs.getString("original_filename"));
-        file.setContentType(rs.getString("content_type"));
-        file.setFileSize(rs.getLong("file_size"));
-        file.setFilePath(rs.getString("file_path"));
-
-        Timestamp uploadTs = rs.getTimestamp("upload_date");
-        if (uploadTs != null) {
-            file.setUploadDate(uploadTs.toLocalDateTime());
+    @Override
+    public boolean deleteById(long id, Long userId) throws DaoException {
+        try {
+            return jdbc.update(DELETE_BY_ID, id, userId) > 0;
+        } catch (DataAccessException ex) {
+            LOGGER.error("deleteById failed for id={}", id, ex);
+            throw new DaoException("Database error in deleteById", ex);
         }
-        return file;
     }
 }

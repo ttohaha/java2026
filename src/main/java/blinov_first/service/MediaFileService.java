@@ -2,12 +2,23 @@ package blinov_first.service;
 
 import blinov_first.entity.MediaFile;
 import blinov_first.exception.ServiceException;
-import java.io.InputStream;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
+import java.util.Optional;
 
 public interface MediaFileService {
-    List<MediaFile> getUserFiles(Long userId) throws ServiceException;
-    boolean uploadFile(InputStream fileStream, String originalFilename, String contentType, long fileSize, Long userId) throws ServiceException;
-    boolean deleteFile(int fileId, Long userId) throws ServiceException;
-    MediaFile getFileForDownload(int fileId, Long userId) throws ServiceException;
+
+    List<MediaFile> findByUserId(Long userId) throws ServiceException;
+
+    Optional<MediaFile> findById(long id) throws ServiceException;
+
+    /**
+     * Stores the uploaded file on disk and saves metadata to the database.
+     *
+     * @return the persisted {@link MediaFile} with a generated ID
+     */
+    MediaFile upload(MultipartFile multipartFile, Long userId) throws ServiceException;
+
+    boolean delete(long fileId, Long userId) throws ServiceException;
 }

@@ -1,26 +1,28 @@
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
-<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+
 <nav class="navbar">
-    <div class="navbar-inner">
-        <a class="navbar-brand" href="${pageContext.request.contextPath}/controller?command=list_entries">
-            &#128222; <fmt:message key="app.title"/>
-        </a>
-        <div class="navbar-nav">
-            <a href="${pageContext.request.contextPath}/controller?command=list_entries"><fmt:message key="nav.phonebook"/></a>
-            <a href="${pageContext.request.contextPath}/controller?command=list_files"><fmt:message key="nav.files"/></a>
-        </div>
-        <div class="navbar-user">
-            <span class="username">&#128100; ${sessionScope.login}</span>
-            <a href="${pageContext.request.contextPath}/controller?command=edit_profile"><fmt:message key="nav.profile"/></a>
-            <div class="locale-switcher">
-                <a href="${pageContext.request.contextPath}/controller?command=change_locale&lang=en"
-                   class="locale-btn ${sessionScope.lang == 'en' || empty sessionScope.lang ? 'active' : ''}">EN</a>
-                <a href="${pageContext.request.contextPath}/controller?command=change_locale&lang=ru"
-                   class="locale-btn ${sessionScope.lang == 'ru' ? 'active' : ''}">RU</a>
-            </div>
-            <a href="${pageContext.request.contextPath}/controller?command=logout" class="btn-logout">
-                <fmt:message key="nav.logout"/>
-            </a>
-        </div>
+    <div class="nav-brand">
+        <a href="${pageContext.request.contextPath}/main">PhoneBook</a>
+    </div>
+    <ul class="nav-links">
+        <li><a href="${pageContext.request.contextPath}/main">Users</a></li>
+        <li><a href="${pageContext.request.contextPath}/phonebook">My Contacts</a></li>
+        <li><a href="${pageContext.request.contextPath}/files">My Files</a></li>
+        <li><a href="${pageContext.request.contextPath}/profile">Profile</a></li>
+        <li class="nav-user">
+            <span>${login}</span>
+        </li>
+        <li>
+            <form method="post"
+                  action="${pageContext.request.contextPath}/auth/logout"
+                  style="display:inline;">
+                <button type="submit" class="btn btn-link">Logout</button>
+            </form>
+        </li>
+    </ul>
+    <div class="locale-switcher">
+        <a href="${pageContext.request.contextPath}/locale?lang=en">EN</a> |
+        <a href="${pageContext.request.contextPath}/locale?lang=ru">RU</a>
     </div>
 </nav>

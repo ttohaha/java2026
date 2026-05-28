@@ -1,18 +1,30 @@
 package blinov_first.util;
 
-import java.security.SecureRandom;
-import java.util.Base64;
+import java.util.UUID;
 
+/**
+ * Generates cryptographically random tokens for email confirmation links.
+ */
 public final class TokenGenerator {
-
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    private static final int TOKEN_BYTE_LENGTH = 32;
 
     private TokenGenerator() {}
 
+    /**
+     * Returns a 32-character lowercase hex string suitable for use as a
+     * one-time confirmation token.
+     */
+    public static String generate() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * Alias for {@link #generate()} — kept for backward compatibility with
+     * code that was written before the Spring migration.
+     *
+     * @deprecated Use {@link #generate()} instead.
+     */
+    @Deprecated
     public static String generateSecureToken() {
-        byte[] randomBytes = new byte[TOKEN_BYTE_LENGTH];
-        SECURE_RANDOM.nextBytes(randomBytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        return generate();
     }
 }

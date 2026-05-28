@@ -1,5 +1,6 @@
 package blinov_first.util;
 
+import blinov_first.exception.AjaxException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -17,16 +18,20 @@ public final class AjaxUtil {
         return AJAX_HEADER_VALUE.equalsIgnoreCase(request.getHeader(AJAX_HEADER_NAME));
     }
 
-    public static void writeJson(HttpServletResponse response, String json) throws IOException {
-        response.setContentType(CONTENT_TYPE_JSON);
-        response.getWriter().write(json);
+    public static void writeJson(HttpServletResponse response, String json) throws AjaxException {
+        try {
+            response.setContentType(CONTENT_TYPE_JSON);
+            response.getWriter().write(json);
+        } catch (IOException e) {
+            throw new AjaxException("Failed to write JSON response", e);
+        }
     }
 
-    public static void writeSuccess(HttpServletResponse response, String message) throws IOException {
+    public static void writeSuccess(HttpServletResponse response, String message) throws AjaxException {
         writeJson(response, buildResult(true, message));
     }
 
-    public static void writeError(HttpServletResponse response, int status, String message) throws IOException {
+    public static void writeError(HttpServletResponse response, int status, String message) throws AjaxException {
         response.setStatus(status);
         writeJson(response, buildResult(false, message));
     }
